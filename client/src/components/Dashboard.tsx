@@ -35,9 +35,12 @@ export default function Dashboard() {
               <div className="lg:col-span-2 space-y-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-xl">AI-Powered Research Tools</CardTitle>
+                    <CardTitle className="text-xl">
+                      AI-Powered Research Tools
+                    </CardTitle>
                     <p className="text-muted-foreground">
-                      Select the AI tools you need for your research and writing tasks
+                      Select the AI tools you need for your research and writing
+                      tasks
                     </p>
                   </CardHeader>
                   <CardContent>
