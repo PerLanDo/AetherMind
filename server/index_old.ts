@@ -1,25 +1,10 @@
 // Load environment variables FIRST before any other imports
 import path from "path";
-import fs from "fs";
 import { config } from "dotenv";
+config({ path: path.resolve(process.cwd(), ".env"), debug: true });
 
-// Force load from .env file and override system env vars
-const envPath = path.resolve(process.cwd(), ".env");
-const envContent = fs.readFileSync(envPath, "utf-8");
-const envVars: Record<string, string> = {};
-
-envContent.split("\n").forEach((line) => {
-  const [key, ...valueParts] = line.split("=");
-  if (key && valueParts.length > 0) {
-    envVars[key.trim()] = valueParts.join("=").trim();
-  }
-});
-
-// Override process.env with .env file values (this overrides system env vars)
-Object.assign(process.env, envVars);
-
-// Additional fallback for DATABASE_URL
-if (!process.env.DATABASE_URL || process.env.DATABASE_URL === "file:./dev.db") {
+// Force override DATABASE_URL if it's set to the default dev.db
+if (process.env.DATABASE_URL === "file:./dev.db") {
   process.env.DATABASE_URL =
     "postgresql://neondb_owner:npg_ZaBACckG5ER4@ep-hidden-poetry-a1kompbw-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
 }
@@ -30,9 +15,13 @@ if (!process.env.GROK_4_FAST_FREE_API_KEY) {
     "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";
 }
 
-console.log("Environment setup complete:");
+console.log("Environment check (after override):");
+console.log("Current working directory:", process.cwd());
+console.log("NODE_ENV:", process.env.NODE_ENV);
+console.log("DATABASE_URL present:", !!process.env.DATABASE_URL);
+console.log("DATABASE_URL length:", process.env.DATABASE_URL?.length);
 console.log(
-  "DATABASE_URL:",
+  "DATABASE_URL preview:",
   process.env.DATABASE_URL?.substring(0, 50) + "..."
 );
 console.log(
@@ -40,27 +29,29 @@ console.log(
   !!process.env.GROK_4_FAST_FREE_API_KEY
 );
 
-// Now import other modules after environment is set up
 import express, { type Request, Response, NextFunction } from "express";
-import cors from "cors";
-import cookieParser from "cookie-parser";
+import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
-const app = express();
-
-// Configure CORS to allow credentials (cookies)
-app.use(
-  cors({
-    origin: "http://localhost:5000", // Allow same origin
-    credentials: true, // Important: allows cookies
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
+console.log("Environment check:");
+console.log("Current working directory:", process.cwd());
+console.log("NODE_ENV:", process.env.NODE_ENV);
+console.log("DATABASE_URL present:", !!process.env.DATABASE_URL);
+console.log("DATABASE_URL length:", process.env.DATABASE_URL?.length);
+console.log(
+  "DATABASE_URL preview:",
+  process.env.DATABASE_URL?.substring(0, 50) + "..."
+);
+console.log(
+  "All env vars containing DATABASE:",
+  Object.keys(process.env)
+    .filter((key) => key.includes("DATABASE"))
+    .map((key) => `${key}=${process.env[key]}`)
 );
 
+const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser());
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -93,8 +84,6 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Import and setup routes after environment is configured
-  const { registerRoutes } = await import("./routes");
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

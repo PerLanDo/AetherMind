@@ -17,6 +17,7 @@ import {
   Plus,
   Grid,
   List as ListIcon,
+  Brain,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +42,7 @@ import { Separator } from "@/components/ui/separator";
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import FileUploadZone from "@/components/FileUploadZone";
+import DocumentAnalyzer from "@/components/DocumentAnalyzer";
 
 interface FileItem {
   id: number;
@@ -63,6 +65,10 @@ export default function FilesPage() {
   const [selectedProject, setSelectedProject] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [showUploader, setShowUploader] = useState(false);
+  const [analyzingFile, setAnalyzingFile] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -139,6 +145,10 @@ export default function FilesPage() {
     if (confirm("Are you sure you want to delete this file?")) {
       deleteMutation.mutate(fileId);
     }
+  };
+
+  const handleFileAnalyze = (file: FileItem) => {
+    setAnalyzingFile({ id: file.id, name: file.name });
   };
 
   return (
@@ -289,6 +299,13 @@ export default function FilesPage() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
+                                onClick={() => handleFileAnalyze(file)}
+                              >
+                                <Brain className="mr-2 h-4 w-4" />
+                                Analyze with AI
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
                                 onClick={() =>
                                   file.url && window.open(file.url, "_blank")
                                 }
@@ -371,6 +388,13 @@ export default function FilesPage() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
+                                onClick={() => handleFileAnalyze(file)}
+                              >
+                                <Brain className="mr-2 h-4 w-4" />
+                                Analyze with AI
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
                                 onClick={() =>
                                   file.url && window.open(file.url, "_blank")
                                 }
@@ -406,6 +430,19 @@ export default function FilesPage() {
           </div>
         </main>
       </div>
+
+      {/* Document Analyzer Modal */}
+      {analyzingFile && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <DocumentAnalyzer
+              fileId={analyzingFile.id.toString()}
+              fileName={analyzingFile.name}
+              onClose={() => setAnalyzingFile(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

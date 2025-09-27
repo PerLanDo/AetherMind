@@ -1,5 +1,6 @@
 // AI service using Grok 4 Fast for OMNISCI AI research assistant
 import OpenAI from "openai";
+import mammoth from "mammoth";
 
 // Using Grok 4 Fast API through OpenRouter
 const client = new OpenAI({
@@ -208,28 +209,133 @@ Provide helpful, accurate, and academically appropriate responses. Be concise bu
     return prompt;
   }
 
+  async analyzeDocument(
+    content: string,
+    fileName: string,
+    analysisType:
+      | "summary"
+      | "key_points"
+      | "research_questions"
+      | "methodology"
+      | "references" = "summary"
+  ): Promise<string> {
+    const prompts = {
+      summary: `Please provide a comprehensive summary of the following document "${fileName}". Focus on the main points, key findings, and conclusions:`,
+      key_points: `Extract the key points and important insights from this document "${fileName}". Present them as a bulleted list:`,
+      research_questions: `Identify the main research questions or objectives addressed in this document "${fileName}":`,
+      methodology: `Analyze and describe the methodology, approach, or methods used in this document "${fileName}":`,
+      references: `Extract and organize any references, citations, or sources mentioned in this document "${fileName}":`,
+    };
+
+    try {
+      const completion = await client.chat.completions.create(
+        {
+          model: this.model,
+          messages: [
+            {
+              role: "system",
+              content: `You are OMNISCI AI, an expert research assistant specializing in document analysis. Provide detailed, academic-level analysis of the provided content.`,
+            },
+            {
+              role: "user",
+              content: `${prompts[analysisType]}\n\n${content.slice(0, 15000)}`, // Limit content to avoid token limits
+            },
+          ],
+          max_tokens: 2000,
+        },
+        {
+          headers: {
+            "HTTP-Referer": "https://aethermind-ai.local",
+            "X-Title": "AetherMind Document Analysis",
+          },
+        }
+      );
+
+      return (
+        completion.choices[0]?.message?.content || "Unable to analyze document."
+      );
+    } catch (error) {
+      console.error("Document analysis error:", error);
+      throw new Error("Failed to analyze document content");
+    }
+  }
+
   async extractTextContent(
     fileName: string,
     mimeType: string,
     buffer: Buffer
   ): Promise<string> {
-    // For now, handle basic text extraction
-    // In a real app, you'd use libraries like pdf-parse, mammoth, etc.
-    if (mimeType.includes("text/")) {
-      return buffer.toString("utf-8");
-    }
+    try {
+      console.log(`Extracting text from ${fileName} (${mimeType})`);
 
-    if (mimeType.includes("json")) {
-      try {
-        return JSON.stringify(JSON.parse(buffer.toString("utf-8")), null, 2);
-      } catch {
+      // Handle plain text files
+      if (mimeType.includes("text/")) {
         return buffer.toString("utf-8");
       }
-    }
 
-    // For PDFs and Word docs, we'd need specialized libraries
-    // For now, return a placeholder that indicates the file type
-    return `[${fileName}] - File content extraction not yet implemented for ${mimeType}. Please upload text files for AI analysis.`;
+      // Handle JSON files
+      if (mimeType.includes("json")) {
+        try {
+          return JSON.stringify(JSON.parse(buffer.toString("utf-8")), null, 2);
+        } catch {
+          return buffer.toString("utf-8");
+        }
+      }
+
+      // Handle PDF files
+      if (mimeType === "application/pdf") {
+        try {
+          const pdfParse = (await import("pdf-parse")).default;
+          const data = await pdfParse(buffer);
+          console.log(`Extracted ${data.text.length} characters from PDF`);
+          return (
+            data.text || `[PDF content could not be extracted from ${fileName}]`
+          );
+        } catch (error) {
+          console.error("PDF parsing error:", error);
+          return `[Error extracting PDF content from ${fileName}. Please try a different file format.]`;
+        }
+      }
+
+      // Handle Word documents (.docx)
+      if (
+        mimeType ===
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      ) {
+        try {
+          const result = await mammoth.extractRawText({ buffer });
+          console.log(
+            `Extracted ${result.value.length} characters from Word document`
+          );
+          return (
+            result.value ||
+            `[Word document content could not be extracted from ${fileName}]`
+          );
+        } catch (error) {
+          console.error("Word document parsing error:", error);
+          return `[Error extracting Word document content from ${fileName}. Please try a different file format.]`;
+        }
+      }
+
+      // Handle legacy Word documents (.doc)
+      if (mimeType === "application/msword") {
+        // Note: mammoth primarily handles .docx files
+        // For .doc files, we'd need additional tools like antiword or textract
+        return `[Legacy Word document (.doc) format detected in ${fileName}. Please convert to .docx format for better text extraction.]`;
+      }
+
+      // Handle CSV files
+      if (mimeType === "text/csv" || fileName.toLowerCase().endsWith(".csv")) {
+        const csvText = buffer.toString("utf-8");
+        return `CSV Data from ${fileName}:\n\n${csvText}`;
+      }
+
+      // Fallback for unsupported formats
+      return `[${fileName}] - File format ${mimeType} is not currently supported for text extraction. Supported formats: PDF (.pdf), Word Documents (.docx), Text files (.txt), CSV (.csv), and JSON (.json).]`;
+    } catch (error) {
+      console.error(`Error extracting text from ${fileName}:`, error);
+      return `[Error occurred while processing ${fileName}. Please try re-uploading the file or use a supported format.]`;
+    }
   }
 }
 

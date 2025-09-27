@@ -1,7 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
-import jwt from "jsonwebtoken";
 import { storage } from "./storage";
 import { aiService } from "./ai-service";
 import { setupAuth } from "./auth";
@@ -20,38 +19,11 @@ const upload = multer({
 });
 
 // Auth middleware
-async function requireAuth(req: any, res: any, next: any) {
-  // First try session authentication
-  if (req.isAuthenticated() && req.user) {
-    return next();
+function requireAuth(req: any, res: any, next: any) {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: "Authentication required" });
   }
-
-  // Try JWT from Authorization header (Bearer token)
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.substring(7);
-
-    const JWT_SECRET = process.env.SESSION_SECRET || "fallback-secret-key";
-
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET) as {
-        id: string;
-        username: string;
-      };
-      if (decoded) {
-        // Get user from storage and attach to req.user
-        const user = await storage.getUser(decoded.id);
-        if (user) {
-          req.user = user;
-          return next();
-        }
-      }
-    } catch (error) {
-      // JWT verification failed, fall through to 401
-    }
-  }
-
-  return res.status(401).json({ error: "Authentication required" });
+  next();
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -78,17 +50,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(project);
     } catch (error) {
       res.status(400).json({ error: "Invalid project data" });
-    }
-  });
-
-  // Clear all user data endpoint
-  app.delete("/api/user/data", requireAuth, async (req, res) => {
-    try {
-      await storage.clearAllUserData(req.user!.id);
-      res.json({ message: "All user data cleared successfully" });
-    } catch (error) {
-      console.error("Error clearing user data:", error);
-      res.status(500).json({ error: "Failed to clear user data" });
     }
   });
 
@@ -138,10 +99,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         ];
         if (!allowedTypes.includes(req.file.mimetype)) {
-          return res.status(400).json({
-            error:
-              "Unsupported file type. Please upload text, PDF, or Word documents.",
-          });
+          return res
+            .status(400)
+            .json({
+              error:
+                "Unsupported file type. Please upload text, PDF, or Word documents.",
+            });
         }
 
         // Extract text content for AI analysis
@@ -172,10 +135,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error("File upload error:", error);
         if (error instanceof Error && error.name === "ZodError") {
-          return res.status(400).json({
-            error: "Invalid file data",
-            details: (error as any).errors,
-          });
+          return res
+            .status(400)
+            .json({
+              error: "Invalid file data",
+              details: (error as any).errors,
+            });
         }
         res.status(500).json({ error: "File upload failed" });
       }
@@ -221,6 +186,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Document analysis endpoint
   app.post("/api/files/:fileId/analyze", requireAuth, async (req, res) => {
     try {
+      // Authorization check: verify user has access to file's project
       const projectId = await storage.verifyFileAccess(
         req.user!.id,
         req.params.fileId
@@ -235,21 +201,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { analysisType = "summary" } = req.body;
-      const validAnalysisTypes = [
-        "summary",
-        "key_points",
-        "research_questions",
-        "methodology",
-        "references",
-      ];
-
+      const validAnalysisTypes = ["summary", "key_points", "research_questions", "methodology", "references"];
+      
       if (!validAnalysisTypes.includes(analysisType)) {
-        return res.status(400).json({
-          error: "Invalid analysis type",
-          validTypes: validAnalysisTypes,
+        return res.status(400).json({ 
+          error: "Invalid analysis type", 
+          validTypes: validAnalysisTypes 
         });
       }
 
+      // Analyze the document content
       const analysis = await aiService.analyzeDocument(
         file.content || "[No content available for analysis]",
         file.originalName || file.name,
@@ -261,7 +222,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fileName: file.originalName || file.name,
         analysisType,
         analysis,
-        timestamp: new Date().toISOString(),
+        timestamp: new Date().toISOString()
       });
     } catch (error) {
       console.error("Document analysis error:", error);
@@ -374,10 +335,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.status(201).json(conversation);
       } catch (error) {
         if (error instanceof Error && error.name === "ZodError") {
-          return res.status(400).json({
-            error: "Invalid conversation data",
-            details: (error as any).errors,
-          });
+          return res
+            .status(400)
+            .json({
+              error: "Invalid conversation data",
+              details: (error as any).errors,
+            });
         }
         res.status(500).json({ error: "Failed to create conversation" });
       }
@@ -425,9 +388,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
             // Critical security check: ensure file belongs to same project as conversation
             if (fileProjectId !== projectId) {
-              return res.status(403).json({
-                error: `File ${fileId} does not belong to this project`,
-              });
+              return res
+                .status(403)
+                .json({
+                  error: `File ${fileId} does not belong to this project`,
+                });
             }
           }
         }
@@ -488,10 +453,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error("Chat error:", error);
         if (error instanceof Error && error.name === "ZodError") {
-          return res.status(400).json({
-            error: "Invalid message data",
-            details: (error as any).errors,
-          });
+          return res
+            .status(400)
+            .json({
+              error: "Invalid message data",
+              details: (error as any).errors,
+            });
         }
         res.status(500).json({ error: "Chat failed" });
       }
@@ -590,9 +557,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Input validation
       const validStatuses = ["pending", "in_progress", "completed", "overdue"];
       if (!status || !validStatuses.includes(status)) {
-        return res.status(400).json({
-          error: "Invalid status. Must be one of: " + validStatuses.join(", "),
-        });
+        return res
+          .status(400)
+          .json({
+            error:
+              "Invalid status. Must be one of: " + validStatuses.join(", "),
+          });
       }
 
       if (

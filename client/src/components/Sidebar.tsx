@@ -13,6 +13,7 @@ import {
   CheckSquare,
   Upload,
   PenTool,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +37,46 @@ interface Project {
 export default function Sidebar() {
   const [location] = useLocation();
   const [selectedProject, setSelectedProject] = useState<number | null>(null);
+  const [isClearing, setIsClearing] = useState(false);
+
+  const handleClearData = async () => {
+    if (
+      !confirm(
+        "Are you sure you want to clear all your data? This action cannot be undone."
+      )
+    ) {
+      return;
+    }
+
+    setIsClearing(true);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch("/api/user/data", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        alert("All data has been successfully cleared!");
+        // Refresh the page to show empty state
+        window.location.reload();
+      } else {
+        const error = await response.json();
+        alert(`Failed to clear data: ${error.error || "Unknown error"}`);
+      }
+    } catch (error) {
+      alert(
+        `Failed to clear data: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    } finally {
+      setIsClearing(false);
+    }
+  };
 
   // Fetch user's projects
   const { data: projects = [], isLoading } = useQuery({
@@ -231,6 +272,16 @@ export default function Sidebar() {
             AI Writing Tools
           </Button>
         </Link>
+        <Button
+          variant="destructive"
+          className="w-full justify-start"
+          size="sm"
+          onClick={handleClearData}
+          disabled={isClearing}
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          {isClearing ? "Clearing..." : "Clear All Data"}
+        </Button>
       </div>
     </aside>
   );

@@ -76,6 +76,9 @@ export interface IStorage {
   verifyTaskAccess(userId: string, taskId: string): Promise<string | null>; // returns projectId
   verifyFileAccess(userId: string, fileId: string): Promise<string | null>; // returns projectId
 
+  // Data management
+  clearAllUserData(userId: string): Promise<void>;
+
   sessionStore: any;
 }
 
@@ -381,6 +384,52 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
 
     return result.length > 0 ? result[0].projectId : null;
+  }
+
+  // Data management method to clear all user data
+  async clearAllUserData(userId: string): Promise<void> {
+    // Get all user's projects (where they are the owner)
+    const userProjects = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.ownerId, userId));
+
+    // For each project, delete all associated data
+    for (const project of userProjects) {
+      // Get all conversations for this project
+      const projectConversations = await db
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(eq(conversations.projectId, project.id));
+
+      // Delete messages for each conversation
+      for (const conversation of projectConversations) {
+        await db
+          .delete(messages)
+          .where(eq(messages.conversationId, conversation.id));
+      }
+
+      // Delete conversations
+      await db
+        .delete(conversations)
+        .where(eq(conversations.projectId, project.id));
+
+      // Delete tasks
+      await db.delete(tasks).where(eq(tasks.projectId, project.id));
+
+      // Delete files
+      await db.delete(files).where(eq(files.projectId, project.id));
+
+      // Delete project members
+      await db
+        .delete(projectMembers)
+        .where(eq(projectMembers.projectId, project.id));
+
+      // Delete the project itself
+      await db.delete(projects).where(eq(projects.id, project.id));
+    }
+
+    console.log(`Cleared all data for user: ${userId}`);
   }
 }
 

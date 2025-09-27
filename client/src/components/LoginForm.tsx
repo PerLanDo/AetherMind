@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/components/AuthProvider";
 
 interface LoginFormProps {
   onSuccess: () => void;
@@ -30,6 +31,7 @@ export default function LoginForm({
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const { toast } = useToast();
+  const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,30 +39,18 @@ export default function LoginForm({
     setError("");
 
     try {
-      const response = await fetch("/api/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-        credentials: "include",
+      await login(formData.username, formData.password);
+      toast({
+        title: "Welcome back!",
+        description: `Successfully logged in as ${formData.username}`,
       });
-
-      if (response.ok) {
-        const user = await response.json();
-        toast({
-          title: "Welcome back!",
-          description: `Successfully logged in as ${user.username}`,
-        });
-        onSuccess();
-      } else {
-        const errorData = await response.json();
-        setError(
-          errorData.error || "Login failed. Please check your credentials."
-        );
-      }
+      onSuccess();
     } catch (error) {
-      setError("Network error. Please try again.");
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Login failed. Please check your credentials."
+      );
       console.error("Login error:", error);
     } finally {
       setIsLoading(false);

@@ -62,7 +62,7 @@ function AuthenticatedApp() {
 
   // Show auth page if not authenticated
   if (!isAuthenticated) {
-    return <AuthPage onAuthSuccess={() => window.location.reload()} />;
+    return <AuthPage onAuthSuccess={() => {}} />;
   }
 
   // Show main app if authenticated

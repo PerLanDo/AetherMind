@@ -114,11 +114,7 @@ export default function RegisterForm({
       });
       onSuccess();
     } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Registration failed. Please try again."
-      );
+      setError(error instanceof Error ? error.message : "Registration failed. Please try again.");
       console.error("Registration error:", error);
     } finally {
       setIsLoading(false);

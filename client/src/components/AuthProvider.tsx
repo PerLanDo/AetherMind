@@ -77,8 +77,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     const userData = await response.json();
-    queryClient.setQueryData(["/api/user"], userData);
-    setIsAuthenticated(true);
+
+    // Store the token in localStorage if present
+    if (userData.token) {
+      localStorage.setItem("authToken", userData.token);
+    }
+
+    // Invalidate and refetch the user query instead of setting data directly
+    await queryClient.invalidateQueries({ queryKey: ["/api/user"] });
   };
 
   const register = async (
@@ -101,8 +107,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     const userData = await response.json();
-    queryClient.setQueryData(["/api/user"], userData);
-    setIsAuthenticated(true);
+    // Invalidate and refetch the user query instead of setting data directly
+    await queryClient.invalidateQueries({ queryKey: ["/api/user"] });
   };
 
   const logout = async () => {
@@ -110,6 +116,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       method: "POST",
       credentials: "include",
     });
+
+    // Clear the token from localStorage
+    localStorage.removeItem("authToken");
 
     queryClient.clear();
     setIsAuthenticated(false);
