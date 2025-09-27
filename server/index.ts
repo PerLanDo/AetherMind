@@ -1,6 +1,4 @@
 // Load environment variables FIRST before any other imports
-// TODO: Implement secure environment variable validation and encryption
-// TODO: Add environment-specific configuration management (dev/staging/prod)
 import path from "path";
 import fs from "fs";
 import { config } from "dotenv";
@@ -98,6 +96,21 @@ app.use((req, res, next) => {
   // Import and setup routes after environment is configured
   const { registerRoutes } = await import("./routes");
   const server = await registerRoutes(app);
+
+  // Initialize notification service with WebSocket support
+  const { NotificationService } = await import("./notification-service");
+  const { notificationHelper } = await import("./notification-helper");
+
+  const notificationService = new NotificationService();
+  notificationService.initialize(server);
+  notificationHelper.setNotificationService(notificationService);
+
+  console.log("Notification WebSocket service initialized");
+
+  // Setup periodic deadline reminders (run every hour)
+  setInterval(() => {
+    notificationHelper.checkAndSendDeadlineReminders();
+  }, 60 * 60 * 1000); // 1 hour
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

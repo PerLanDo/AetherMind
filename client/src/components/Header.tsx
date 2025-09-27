@@ -12,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/hooks/use-toast";
+import { NotificationCenter } from "@/components/NotificationCenter";
 
 export default function Header() {
   const { user, logout } = useAuth();
@@ -64,9 +65,15 @@ export default function Header() {
 
       {/* User Controls */}
       <div className="flex items-center gap-2">
-        <Button size="icon" variant="ghost" data-testid="button-notifications">
-          <Bell className="h-4 w-4" />
-        </Button>
+        {user && (
+          <NotificationCenter
+            userId={user.id}
+            onNotificationClick={(notification) => {
+              // Handle notification click - could navigate to related item
+              console.log("Notification clicked:", notification);
+            }}
+          />
+        )}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

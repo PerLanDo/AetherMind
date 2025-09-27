@@ -10,6 +10,7 @@ import ProjectsPage from "@/pages/ProjectsPage";
 import FilesPage from "@/pages/FilesPage";
 import TasksPage from "@/pages/TasksPage";
 import AIToolsPage from "@/pages/AIToolsPage";
+import CitationGenerator from "@/components/CitationGenerator";
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import Dashboard from "@/components/Dashboard";
@@ -42,6 +43,7 @@ function Router() {
       <Route path="/files" component={FilesPage} />
       <Route path="/tasks" component={TasksPage} />
       <Route path="/ai-tools" component={AIToolsPage} />
+      <Route path="/citations" component={CitationGenerator} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -52,7 +54,7 @@ function AuthenticatedApp() {
 
   // TODO: Add error boundary to handle authentication errors gracefully
   // TODO: Implement auto-logout after period of inactivity for security
-  
+
   // Show loading spinner while checking authentication
   if (isLoading) {
     return (

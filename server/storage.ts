@@ -6,6 +6,10 @@ import {
   conversations,
   messages,
   tasks,
+  documentVersions,
+  changeRecords,
+  conflictResolutions,
+  notifications,
   type User,
   type InsertUser,
   type Project,
@@ -18,9 +22,17 @@ import {
   type InsertMessage,
   type Task,
   type InsertTask,
+  type DocumentVersion,
+  type InsertDocumentVersion,
+  type ChangeRecord,
+  type InsertChangeRecord,
+  type ConflictResolution,
+  type InsertConflictResolution,
+  type Notification,
+  type InsertNotification,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, or, ilike } from "drizzle-orm";
+import { eq, and, desc, or, ilike, sql } from "drizzle-orm";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
@@ -76,8 +88,89 @@ export interface IStorage {
   verifyTaskAccess(userId: string, taskId: string): Promise<string | null>; // returns projectId
   verifyFileAccess(userId: string, fileId: string): Promise<string | null>; // returns projectId
 
+  // Team management methods
+  getProjectMembers(projectId: string): Promise<
+    Array<{
+      id: string;
+      username: string;
+      email?: string;
+      role: string;
+      joinedAt: Date;
+    }>
+  >;
+  removeProjectMember(projectId: string, userId: string): Promise<void>;
+  updateMemberRole(
+    projectId: string,
+    userId: string,
+    role: string
+  ): Promise<void>;
+  getUserProjectRole(userId: string, projectId: string): Promise<string | null>;
+
+  // Project access with role-based permissions
+  getUserProjectsWithRole(
+    userId: string
+  ): Promise<Array<Project & { role: string }>>;
+
+  // Version control methods
+  saveDocumentVersion(
+    version: InsertDocumentVersion & { id: string; createdAt: Date | string }
+  ): Promise<DocumentVersion>;
+  getVersionHistory(fileId: string): Promise<DocumentVersion[]>;
+  getCurrentVersion(fileId: string): Promise<DocumentVersion | null>;
+  getVersion(
+    fileId: string,
+    versionNumber: number
+  ): Promise<DocumentVersion | null>;
+  getRecentVersions(fileId: string, limit: number): Promise<DocumentVersion[]>;
+  deactivateVersion(versionId: string): Promise<void>;
+  getConflictResolution(conflictId: string): Promise<ConflictResolution | null>;
+  updateConflictResolution(
+    conflictId: string,
+    updates: Partial<ConflictResolution>
+  ): Promise<void>;
+  saveConflictResolution(
+    conflict: InsertConflictResolution & {
+      id: string;
+      createdAt: Date | string;
+    }
+  ): Promise<ConflictResolution>;
+  canUserEditProject(userId: string, projectId: string): Promise<boolean>;
+  canUserViewProject(userId: string, projectId: string): Promise<boolean>;
+  canUserManageMembers(userId: string, projectId: string): Promise<boolean>;
+
   // Data management
   clearAllUserData(userId: string): Promise<void>;
+
+  // Notification methods
+  saveNotification(notification: {
+    id: string;
+    userId: string;
+    type: string;
+    title: string;
+    message: string;
+    data?: any;
+    read: boolean;
+    createdAt: Date;
+  }): Promise<void>;
+  getUserNotifications(
+    userId: string,
+    limit?: number
+  ): Promise<
+    Array<{
+      id: string;
+      userId: string;
+      type: string;
+      title: string;
+      message: string;
+      data: any;
+      read: boolean;
+      createdAt: Date;
+    }>
+  >;
+  markNotificationAsRead(notificationId: string): Promise<void>;
+  markAllNotificationsAsRead(userId: string): Promise<void>;
+  deleteNotification(notificationId: string): Promise<void>;
+  getUnreadNotificationCount(userId: string): Promise<number>;
 
   sessionStore: any;
 }
@@ -132,6 +225,27 @@ export class DatabaseStorage implements IStorage {
     return userProjects;
   }
 
+  async getUserProjectsWithRole(
+    userId: string
+  ): Promise<Array<Project & { role: string }>> {
+    const result = await db
+      .select({
+        id: projects.id,
+        name: projects.name,
+        description: projects.description,
+        ownerId: projects.ownerId,
+        createdAt: projects.createdAt,
+        updatedAt: projects.updatedAt,
+        role: projectMembers.role,
+      })
+      .from(projects)
+      .innerJoin(projectMembers, eq(projects.id, projectMembers.projectId))
+      .where(eq(projectMembers.userId, userId))
+      .orderBy(desc(projects.updatedAt));
+
+    return result;
+  }
+
   async createProject(project: InsertProject): Promise<Project> {
     const [newProject] = await db
       .insert(projects)
@@ -167,6 +281,107 @@ export class DatabaseStorage implements IStorage {
       role,
       joinedAt: new Date(),
     });
+  }
+
+  // Team management methods
+  async getProjectMembers(projectId: string): Promise<
+    Array<{
+      id: string;
+      username: string;
+      email?: string;
+      role: string;
+      joinedAt: Date;
+    }>
+  > {
+    const result = await db
+      .select({
+        id: users.id,
+        username: users.username,
+        email: users.email,
+        role: projectMembers.role,
+        joinedAt: projectMembers.joinedAt,
+      })
+      .from(projectMembers)
+      .innerJoin(users, eq(projectMembers.userId, users.id))
+      .where(eq(projectMembers.projectId, projectId))
+      .orderBy(projectMembers.joinedAt);
+
+    return result.map((member) => ({
+      id: member.id,
+      username: member.username,
+      email: member.email || undefined,
+      role: member.role,
+      joinedAt: member.joinedAt!,
+    }));
+  }
+
+  async removeProjectMember(projectId: string, userId: string): Promise<void> {
+    await db
+      .delete(projectMembers)
+      .where(
+        and(
+          eq(projectMembers.projectId, projectId),
+          eq(projectMembers.userId, userId)
+        )
+      );
+  }
+
+  async updateMemberRole(
+    projectId: string,
+    userId: string,
+    role: string
+  ): Promise<void> {
+    await db
+      .update(projectMembers)
+      .set({ role })
+      .where(
+        and(
+          eq(projectMembers.projectId, projectId),
+          eq(projectMembers.userId, userId)
+        )
+      );
+  }
+
+  async getUserProjectRole(
+    userId: string,
+    projectId: string
+  ): Promise<string | null> {
+    const [result] = await db
+      .select({ role: projectMembers.role })
+      .from(projectMembers)
+      .where(
+        and(
+          eq(projectMembers.userId, userId),
+          eq(projectMembers.projectId, projectId)
+        )
+      );
+
+    return result?.role || null;
+  }
+
+  // Permission check methods
+  async canUserEditProject(
+    userId: string,
+    projectId: string
+  ): Promise<boolean> {
+    const role = await this.getUserProjectRole(userId, projectId);
+    return role === "Owner" || role === "Editor";
+  }
+
+  async canUserViewProject(
+    userId: string,
+    projectId: string
+  ): Promise<boolean> {
+    const role = await this.getUserProjectRole(userId, projectId);
+    return role === "Owner" || role === "Editor" || role === "Viewer";
+  }
+
+  async canUserManageMembers(
+    userId: string,
+    projectId: string
+  ): Promise<boolean> {
+    const role = await this.getUserProjectRole(userId, projectId);
+    return role === "Owner";
   }
 
   // File methods
@@ -430,6 +645,228 @@ export class DatabaseStorage implements IStorage {
     }
 
     console.log(`Cleared all data for user: ${userId}`);
+  }
+
+  // Version control methods
+  async saveDocumentVersion(
+    version: InsertDocumentVersion & { id: string; createdAt: Date | string }
+  ): Promise<DocumentVersion> {
+    const [result] = await db
+      .insert(documentVersions)
+      .values({
+        id: version.id,
+        fileId: version.fileId,
+        versionNumber: version.versionNumber,
+        content: version.content,
+        contentHash: version.contentHash,
+        title: version.title,
+        createdBy: version.createdBy,
+        comment: version.comment,
+        isActive: version.isActive,
+        size: version.size,
+        metadata: version.metadata,
+        createdAt:
+          typeof version.createdAt === "string"
+            ? new Date(version.createdAt)
+            : version.createdAt,
+      })
+      .returning();
+
+    return result;
+  }
+
+  async getVersionHistory(fileId: string): Promise<DocumentVersion[]> {
+    return await db
+      .select()
+      .from(documentVersions)
+      .where(eq(documentVersions.fileId, fileId))
+      .orderBy(desc(documentVersions.versionNumber));
+  }
+
+  async getCurrentVersion(fileId: string): Promise<DocumentVersion | null> {
+    const [result] = await db
+      .select()
+      .from(documentVersions)
+      .where(
+        and(
+          eq(documentVersions.fileId, fileId),
+          eq(documentVersions.isActive, true)
+        )
+      )
+      .limit(1);
+
+    return result || null;
+  }
+
+  async getVersion(
+    fileId: string,
+    versionNumber: number
+  ): Promise<DocumentVersion | null> {
+    const [result] = await db
+      .select()
+      .from(documentVersions)
+      .where(
+        and(
+          eq(documentVersions.fileId, fileId),
+          eq(documentVersions.versionNumber, versionNumber)
+        )
+      )
+      .limit(1);
+
+    return result || null;
+  }
+
+  async getRecentVersions(
+    fileId: string,
+    limit: number
+  ): Promise<DocumentVersion[]> {
+    return await db
+      .select()
+      .from(documentVersions)
+      .where(eq(documentVersions.fileId, fileId))
+      .orderBy(desc(documentVersions.createdAt))
+      .limit(limit);
+  }
+
+  async deactivateVersion(versionId: string): Promise<void> {
+    await db
+      .update(documentVersions)
+      .set({ isActive: false })
+      .where(eq(documentVersions.id, versionId));
+  }
+
+  async getConflictResolution(
+    conflictId: string
+  ): Promise<ConflictResolution | null> {
+    const [result] = await db
+      .select()
+      .from(conflictResolutions)
+      .where(eq(conflictResolutions.id, conflictId))
+      .limit(1);
+
+    return result || null;
+  }
+
+  async updateConflictResolution(
+    conflictId: string,
+    updates: Partial<ConflictResolution>
+  ): Promise<void> {
+    await db
+      .update(conflictResolutions)
+      .set(updates)
+      .where(eq(conflictResolutions.id, conflictId));
+  }
+
+  async saveConflictResolution(
+    conflict: InsertConflictResolution & {
+      id: string;
+      createdAt: Date | string;
+    }
+  ): Promise<ConflictResolution> {
+    const [result] = await db
+      .insert(conflictResolutions)
+      .values({
+        id: conflict.id,
+        fileId: conflict.fileId,
+        baseVersion: conflict.baseVersion,
+        conflictingVersions: conflict.conflictingVersions,
+        conflicts: conflict.conflicts,
+        status: conflict.status,
+        resolvedBy: conflict.resolvedBy,
+        createdAt:
+          typeof conflict.createdAt === "string"
+            ? new Date(conflict.createdAt)
+            : conflict.createdAt,
+      })
+      .returning();
+
+    return result;
+  }
+
+  // Notification methods
+  async saveNotification(notification: {
+    id: string;
+    userId: string;
+    type: string;
+    title: string;
+    message: string;
+    data?: any;
+    read: boolean;
+    createdAt: Date;
+  }): Promise<void> {
+    await db.insert(notifications).values({
+      id: notification.id,
+      userId: notification.userId,
+      type: notification.type,
+      title: notification.title,
+      message: notification.message,
+      data: notification.data || null,
+      read: notification.read,
+      createdAt: notification.createdAt,
+    });
+  }
+
+  async getUserNotifications(
+    userId: string,
+    limit: number = 50
+  ): Promise<
+    Array<{
+      id: string;
+      userId: string;
+      type: string;
+      title: string;
+      message: string;
+      data: any;
+      read: boolean;
+      createdAt: Date;
+    }>
+  > {
+    const result = await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(limit);
+
+    return result.map((notification) => ({
+      id: notification.id,
+      userId: notification.userId,
+      type: notification.type,
+      title: notification.title,
+      message: notification.message,
+      data: notification.data || {},
+      read: notification.read || false,
+      createdAt: notification.createdAt || new Date(),
+    }));
+  }
+
+  async markNotificationAsRead(notificationId: string): Promise<void> {
+    await db
+      .update(notifications)
+      .set({ read: true })
+      .where(eq(notifications.id, notificationId));
+  }
+
+  async markAllNotificationsAsRead(userId: string): Promise<void> {
+    await db
+      .update(notifications)
+      .set({ read: true })
+      .where(eq(notifications.userId, userId));
+  }
+
+  async deleteNotification(notificationId: string): Promise<void> {
+    await db.delete(notifications).where(eq(notifications.id, notificationId));
+  }
+
+  async getUnreadNotificationCount(userId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(notifications)
+      .where(
+        and(eq(notifications.userId, userId), eq(notifications.read, false))
+      );
+
+    return result[0]?.count || 0;
   }
 }
 

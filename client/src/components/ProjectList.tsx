@@ -14,6 +14,9 @@ import {
   Settings,
   Trash2,
   Share,
+  Crown,
+  Edit,
+  Eye,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -31,6 +34,7 @@ interface Project {
   ownerId: string;
   createdAt: string;
   updatedAt: string;
+  role: "Owner" | "Editor" | "Viewer";
 }
 
 interface ProjectListProps {
@@ -170,15 +174,22 @@ export default function ProjectList({ onSelectProject }: ProjectListProps) {
                       <Settings className="mr-2 h-4 w-4" />
                       Settings
                     </DropdownMenuItem>
-                    <DropdownMenuItem>
-                      <Share className="mr-2 h-4 w-4" />
-                      Share
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem className="text-destructive">
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </DropdownMenuItem>
+                    {(project.role === "Owner" ||
+                      project.role === "Editor") && (
+                      <DropdownMenuItem>
+                        <Share className="mr-2 h-4 w-4" />
+                        Share
+                      </DropdownMenuItem>
+                    )}
+                    {project.role === "Owner" && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="text-destructive">
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -187,8 +198,10 @@ export default function ProjectList({ onSelectProject }: ProjectListProps) {
               <div className="flex items-center justify-between text-sm text-muted-foreground">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-1">
-                    <Users className="h-3 w-3" />
-                    <span>Owner</span>
+                    {project.role === "Owner" && <Crown className="h-3 w-3" />}
+                    {project.role === "Editor" && <Edit className="h-3 w-3" />}
+                    {project.role === "Viewer" && <Eye className="h-3 w-3" />}
+                    <span>{project.role}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <Calendar className="h-3 w-3" />

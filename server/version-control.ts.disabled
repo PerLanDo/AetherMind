@@ -1,0 +1,601 @@
+import { storage } from "./storage";
+import {
+  DocumentVersion as DBDocumentVersion,
+  ChangeRecord as DBChangeRecord,
+  ConflictResolution as DBConflictResolution,
+  InsertDocumentVersion,
+  InsertChangeRecord,
+  InsertConflictResolution,
+} from "@shared/schema";
+
+// Enhanced version with computed changes
+export interface DocumentVersion extends DBDocumentVersion {
+  changes: ChangeRecord[];
+}
+
+export interface ChangeRecord {
+  id: string;
+  type: "insertion" | "deletion" | "modification";
+  position: { line: number; column: number };
+  oldContent?: string;
+  newContent?: string;
+  timestamp: string;
+  author: string;
+}
+
+export interface ConflictResolution {
+  conflictId: string;
+  fileId: string;
+  baseVersion: number;
+  conflictingVersions: number[];
+  conflicts: Conflict[];
+  status: "pending" | "resolved" | "auto-resolved";
+  createdAt: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+}
+
+export interface Conflict {
+  id: string;
+  type: "content" | "title" | "structure";
+  startLine: number;
+  endLine: number;
+  baseContent: string;
+  versions: {
+    versionId: string;
+    author: string;
+    content: string;
+    timestamp: string;
+  }[];
+  resolution?: {
+    chosenContent: string;
+    resolvedBy: string;
+    resolvedAt: string;
+    method: "manual" | "auto" | "merge";
+  };
+}
+
+export class VersionControlService {
+  async createVersion(
+    fileId: string,
+    content: string,
+    userId: string,
+    comment?: string
+  ): Promise<DocumentVersion> {
+    try {
+      // Get the current active version
+      const currentVersion = await this.getCurrentVersion(fileId);
+      const newVersionNumber = currentVersion
+        ? currentVersion.versionNumber + 1
+        : 1;
+
+      // Generate content hash for deduplication
+      const contentHash = await this.generateContentHash(content);
+
+      // Check if content is identical to current version
+      if (currentVersion && currentVersion.contentHash === contentHash) {
+        return currentVersion; // No changes, return current version
+      }
+
+      // Calculate changes from previous version
+      const changes = currentVersion
+        ? await this.calculateChanges(currentVersion.content, content, userId)
+        : [];
+
+      // Calculate metadata
+      const metadata = this.calculateMetadata(content, changes);
+
+      const version: DocumentVersion = {
+        id: this.generateVersionId(),
+        fileId,
+        versionNumber: newVersionNumber,
+        content,
+        contentHash,
+        title: await this.extractTitle(content),
+        changes,
+        createdBy: userId,
+        createdAt: new Date().toISOString(),
+        comment,
+        isActive: true,
+        size: content.length,
+        metadata,
+      };
+
+      // Deactivate previous version
+      if (currentVersion) {
+        await this.deactivateVersion(currentVersion.id);
+      }
+
+      // Save new version
+      await this.saveVersion(version);
+
+      // Check for potential conflicts with concurrent edits
+      await this.detectAndResolveConflicts(fileId, version);
+
+      return version;
+    } catch (error) {
+      console.error("Error creating version:", error);
+      throw new Error("Failed to create document version");
+    }
+  }
+
+  async getVersionHistory(fileId: string): Promise<DocumentVersion[]> {
+    try {
+      // Get all versions for the file, ordered by version number descending
+      const versions = await storage.getVersionHistory(fileId);
+      return versions.sort((a, b) => b.versionNumber - a.versionNumber);
+    } catch (error) {
+      console.error("Error getting version history:", error);
+      throw new Error("Failed to retrieve version history");
+    }
+  }
+
+  async getCurrentVersion(fileId: string): Promise<DocumentVersion | null> {
+    try {
+      return await storage.getCurrentVersion(fileId);
+    } catch (error) {
+      console.error("Error getting current version:", error);
+      return null;
+    }
+  }
+
+  async rollbackToVersion(
+    fileId: string,
+    targetVersionNumber: number,
+    userId: string,
+    comment: string = "Rolled back to previous version"
+  ): Promise<DocumentVersion> {
+    try {
+      // Get the target version
+      const targetVersion = await storage.getVersion(
+        fileId,
+        targetVersionNumber
+      );
+      if (!targetVersion) {
+        throw new Error("Target version not found");
+      }
+
+      // Create a new version with the rolled-back content
+      const rollbackVersion = await this.createVersion(
+        fileId,
+        targetVersion.content,
+        userId,
+        `${comment} (rollback to v${targetVersionNumber})`
+      );
+
+      // Log the rollback action
+      await this.logVersionEvent({
+        type: "rollback",
+        fileId,
+        fromVersion: await this.getCurrentVersion(fileId),
+        toVersion: rollbackVersion,
+        userId,
+        timestamp: new Date().toISOString(),
+      });
+
+      return rollbackVersion;
+    } catch (error) {
+      console.error("Error rolling back version:", error);
+      throw new Error("Failed to rollback to version");
+    }
+  }
+
+  async compareVersions(
+    fileId: string,
+    version1: number,
+    version2: number
+  ): Promise<{
+    additions: ChangeRecord[];
+    deletions: ChangeRecord[];
+    modifications: ChangeRecord[];
+    summary: {
+      linesAdded: number;
+      linesDeleted: number;
+      linesModified: number;
+      wordsChanged: number;
+    };
+  }> {
+    try {
+      const v1 = await storage.getVersion(fileId, version1);
+      const v2 = await storage.getVersion(fileId, version2);
+
+      if (!v1 || !v2) {
+        throw new Error("One or both versions not found");
+      }
+
+      const changes = await this.calculateChanges(
+        v1.content,
+        v2.content,
+        "system"
+      );
+
+      const additions = changes.filter((c) => c.type === "insertion");
+      const deletions = changes.filter((c) => c.type === "deletion");
+      const modifications = changes.filter((c) => c.type === "modification");
+
+      return {
+        additions,
+        deletions,
+        modifications,
+        summary: {
+          linesAdded: additions.length,
+          linesDeleted: deletions.length,
+          linesModified: modifications.length,
+          wordsChanged: changes.reduce((sum, change) => {
+            const wordCount = (
+              change.newContent ||
+              change.oldContent ||
+              ""
+            ).split(/\s+/).length;
+            return sum + wordCount;
+          }, 0),
+        },
+      };
+    } catch (error) {
+      console.error("Error comparing versions:", error);
+      throw new Error("Failed to compare versions");
+    }
+  }
+
+  async detectConflicts(fileId: string): Promise<ConflictResolution[]> {
+    try {
+      // Get recent versions that might have conflicts
+      const recentVersions = await storage.getRecentVersions(fileId, 5);
+      const conflicts: ConflictResolution[] = [];
+
+      for (let i = 0; i < recentVersions.length - 1; i++) {
+        const current = recentVersions[i];
+        const previous = recentVersions[i + 1];
+
+        // Check for concurrent modifications
+        const timeDiff =
+          new Date(current.createdAt).getTime() -
+          new Date(previous.createdAt).getTime();
+        const isCloseInTime = timeDiff < 60000; // Within 1 minute
+        const differentAuthors = current.createdBy !== previous.createdBy;
+
+        if (isCloseInTime && differentAuthors) {
+          const conflictResolution = await this.analyzeConflict(
+            current,
+            previous
+          );
+          if (conflictResolution) {
+            conflicts.push(conflictResolution);
+          }
+        }
+      }
+
+      return conflicts;
+    } catch (error) {
+      console.error("Error detecting conflicts:", error);
+      return [];
+    }
+  }
+
+  async resolveConflict(
+    conflictId: string,
+    resolutions: { conflictId: string; chosenContent: string }[],
+    userId: string
+  ): Promise<DocumentVersion> {
+    try {
+      const conflict = await storage.getConflictResolution(conflictId);
+      if (!conflict) {
+        throw new Error("Conflict not found");
+      }
+
+      // Build merged content
+      let mergedContent = "";
+      const baseVersion = await storage.getVersion(
+        conflict.fileId,
+        conflict.baseVersion
+      );
+      if (!baseVersion) {
+        throw new Error("Base version not found");
+      }
+
+      // Apply conflict resolutions
+      const lines = baseVersion.content.split("\n");
+      for (const conflictDetail of conflict.conflicts) {
+        const resolution = resolutions.find(
+          (r) => r.conflictId === conflictDetail.id
+        );
+        if (resolution) {
+          // Replace conflict lines with chosen content
+          lines.splice(
+            conflictDetail.startLine,
+            conflictDetail.endLine - conflictDetail.startLine + 1,
+            resolution.chosenContent
+          );
+
+          // Mark conflict as resolved
+          conflictDetail.resolution = {
+            chosenContent: resolution.chosenContent,
+            resolvedBy: userId,
+            resolvedAt: new Date().toISOString(),
+            method: "manual",
+          };
+        }
+      }
+
+      mergedContent = lines.join("\n");
+
+      // Create new version with resolved content
+      const resolvedVersion = await this.createVersion(
+        conflict.fileId,
+        mergedContent,
+        userId,
+        `Resolved merge conflict ${conflictId}`
+      );
+
+      // Update conflict resolution status
+      await storage.updateConflictResolution(conflictId, {
+        status: "resolved",
+        resolvedAt: new Date().toISOString(),
+        resolvedBy: userId,
+      });
+
+      return resolvedVersion;
+    } catch (error) {
+      console.error("Error resolving conflict:", error);
+      throw new Error("Failed to resolve conflict");
+    }
+  }
+
+  async getFileHistory(
+    fileId: string,
+    limit: number = 50
+  ): Promise<{
+    versions: DocumentVersion[];
+    timeline: {
+      date: string;
+      versions: DocumentVersion[];
+      totalChanges: number;
+    }[];
+    statistics: {
+      totalVersions: number;
+      totalChanges: number;
+      contributors: string[];
+      avgVersionSize: number;
+      creationDate: string;
+      lastModified: string;
+    };
+  }> {
+    try {
+      const versions = await this.getVersionHistory(fileId);
+      const limitedVersions = versions.slice(0, limit);
+
+      // Group by date
+      const timeline = this.groupVersionsByDate(limitedVersions);
+
+      // Calculate statistics
+      const statistics = {
+        totalVersions: versions.length,
+        totalChanges: versions.reduce((sum, v) => sum + v.changes.length, 0),
+        contributors: Array.from(new Set(versions.map((v) => v.createdBy))),
+        avgVersionSize:
+          versions.reduce((sum, v) => sum + v.size, 0) / versions.length,
+        creationDate:
+          versions[versions.length - 1]?.createdAt || new Date().toISOString(),
+        lastModified: versions[0]?.createdAt || new Date().toISOString(),
+      };
+
+      return {
+        versions: limitedVersions,
+        timeline,
+        statistics,
+      };
+    } catch (error) {
+      console.error("Error getting file history:", error);
+      throw new Error("Failed to get file history");
+    }
+  }
+
+  // Private helper methods
+
+  private async generateContentHash(content: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(content);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  private async calculateChanges(
+    oldContent: string,
+    newContent: string,
+    userId: string
+  ): Promise<ChangeRecord[]> {
+    const changes: ChangeRecord[] = [];
+    const oldLines = oldContent.split("\n");
+    const newLines = newContent.split("\n");
+
+    // Simple line-based diff algorithm
+    let i = 0,
+      j = 0;
+    while (i < oldLines.length || j < newLines.length) {
+      if (i >= oldLines.length) {
+        // Insertion
+        changes.push({
+          id: this.generateChangeId(),
+          type: "insertion",
+          position: { line: j + 1, column: 0 },
+          newContent: newLines[j],
+          timestamp: new Date().toISOString(),
+          author: userId,
+        });
+        j++;
+      } else if (j >= newLines.length) {
+        // Deletion
+        changes.push({
+          id: this.generateChangeId(),
+          type: "deletion",
+          position: { line: i + 1, column: 0 },
+          oldContent: oldLines[i],
+          timestamp: new Date().toISOString(),
+          author: userId,
+        });
+        i++;
+      } else if (oldLines[i] !== newLines[j]) {
+        // Modification
+        changes.push({
+          id: this.generateChangeId(),
+          type: "modification",
+          position: { line: i + 1, column: 0 },
+          oldContent: oldLines[i],
+          newContent: newLines[j],
+          timestamp: new Date().toISOString(),
+          author: userId,
+        });
+        i++;
+        j++;
+      } else {
+        // No change
+        i++;
+        j++;
+      }
+    }
+
+    return changes;
+  }
+
+  private calculateMetadata(
+    content: string,
+    changes: ChangeRecord[]
+  ): DocumentVersion["metadata"] {
+    const words = content.split(/\s+/).filter((word) => word.length > 0);
+    const lines = content.split("\n");
+
+    return {
+      wordCount: words.length,
+      characterCount: content.length,
+      linesChanged: changes.length,
+      insertions: changes.filter((c) => c.type === "insertion").length,
+      deletions: changes.filter((c) => c.type === "deletion").length,
+    };
+  }
+
+  private async extractTitle(content: string): Promise<string> {
+    // Extract title from first line or first heading
+    const lines = content.split("\n");
+    const firstLine = lines[0]?.trim() || "";
+
+    // Check for markdown heading
+    if (firstLine.startsWith("#")) {
+      return firstLine.replace(/^#+\s*/, "").trim();
+    }
+
+    // Use first line if not empty, otherwise use generic title
+    return firstLine || "Untitled Document";
+  }
+
+  private async analyzeConflict(
+    version1: DocumentVersion,
+    version2: DocumentVersion
+  ): Promise<ConflictResolution | null> {
+    // Implement conflict detection logic
+    const conflicts: Conflict[] = [];
+
+    // Simple conflict detection - compare content changes
+    const lines1 = version1.content.split("\n");
+    const lines2 = version2.content.split("\n");
+
+    for (let i = 0; i < Math.max(lines1.length, lines2.length); i++) {
+      if (lines1[i] !== lines2[i]) {
+        conflicts.push({
+          id: this.generateConflictId(),
+          type: "content",
+          startLine: i,
+          endLine: i,
+          baseContent: lines2[i] || "",
+          versions: [
+            {
+              versionId: version1.id,
+              author: version1.createdBy,
+              content: lines1[i] || "",
+              timestamp: version1.createdAt,
+            },
+            {
+              versionId: version2.id,
+              author: version2.createdBy,
+              content: lines2[i] || "",
+              timestamp: version2.createdAt,
+            },
+          ],
+        });
+      }
+    }
+
+    if (conflicts.length === 0) {
+      return null;
+    }
+
+    return {
+      conflictId: this.generateConflictId(),
+      fileId: version1.fileId,
+      baseVersion: version2.versionNumber,
+      conflictingVersions: [version1.versionNumber],
+      conflicts,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  private groupVersionsByDate(versions: DocumentVersion[]) {
+    const grouped = versions.reduce((acc, version) => {
+      const date = version.createdAt.split("T")[0];
+      if (!acc[date]) {
+        acc[date] = [];
+      }
+      acc[date].push(version);
+      return acc;
+    }, {} as Record<string, DocumentVersion[]>);
+
+    return Object.entries(grouped)
+      .map(([date, versions]) => ({
+        date,
+        versions,
+        totalChanges: versions.reduce((sum, v) => sum + v.changes.length, 0),
+      }))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }
+
+  private async saveVersion(version: DocumentVersion): Promise<void> {
+    await storage.saveDocumentVersion(version);
+  }
+
+  private async deactivateVersion(versionId: string): Promise<void> {
+    await storage.deactivateVersion(versionId);
+  }
+
+  private async logVersionEvent(event: any): Promise<void> {
+    console.log("Version event:", event);
+    // Could implement proper event logging here
+  }
+
+  private async detectAndResolveConflicts(
+    fileId: string,
+    version: DocumentVersion
+  ): Promise<void> {
+    const conflicts = await this.detectConflicts(fileId);
+    if (conflicts.length > 0) {
+      console.log(
+        `Detected ${conflicts.length} potential conflicts for file ${fileId}`
+      );
+      // Could implement automatic conflict resolution strategies here
+    }
+  }
+
+  private generateVersionId(): string {
+    return "ver_" + Math.random().toString(36).substr(2, 9);
+  }
+
+  private generateChangeId(): string {
+    return "chg_" + Math.random().toString(36).substr(2, 9);
+  }
+
+  private generateConflictId(): string {
+    return "conf_" + Math.random().toString(36).substr(2, 9);
+  }
+}
+
+export const versionControlService = new VersionControlService();

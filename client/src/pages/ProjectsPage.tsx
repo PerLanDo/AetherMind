@@ -9,6 +9,7 @@ interface Project {
   ownerId: string;
   createdAt: string;
   updatedAt: string;
+  role: "Owner" | "Editor" | "Viewer"; // Add role property
 }
 
 export default function ProjectsPage() {

@@ -4,6 +4,7 @@ import multer from "multer";
 import jwt from "jsonwebtoken";
 import { storage } from "./storage";
 import { aiService } from "./ai-service";
+import { citationService } from "./citation-service";
 import { setupAuth } from "./auth";
 import {
   insertProjectSchema,
@@ -58,10 +59,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Sets up authentication routes: /api/register, /api/login, /api/logout, /api/user
   setupAuth(app);
 
+  // Health check endpoint
+  app.get("/api/health", (req, res) => {
+    res.json({
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      version: process.env.npm_package_version || "1.0.0",
+      environment: process.env.NODE_ENV || "development",
+    });
+  });
+
   // Project routes
   app.get("/api/projects", requireAuth, async (req, res) => {
     try {
-      const projects = await storage.getUserProjects(req.user!.id);
+      // Return all projects where user is a member, with their role
+      const projects = await storage.getUserProjectsWithRole(req.user!.id);
       res.json(projects);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch projects" });
@@ -78,6 +91,197 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(project);
     } catch (error) {
       res.status(400).json({ error: "Invalid project data" });
+    }
+  });
+
+  // Enhanced project routes with role-based access
+  app.get("/api/projects/with-roles", requireAuth, async (req, res) => {
+    try {
+      const projects = await storage.getUserProjectsWithRole(req.user!.id);
+      res.json(projects);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch projects with roles" });
+    }
+  });
+
+  // Team management routes
+  app.get("/api/projects/:projectId/members", requireAuth, async (req, res) => {
+    try {
+      // Check if user can view the project
+      const canView = await storage.canUserViewProject(
+        req.user!.id,
+        req.params.projectId
+      );
+      if (!canView) {
+        return res.status(403).json({ error: "Access denied to this project" });
+      }
+
+      const members = await storage.getProjectMembers(req.params.projectId);
+      res.json(members);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch project members" });
+    }
+  });
+
+  app.post(
+    "/api/projects/:projectId/members",
+    requireAuth,
+    async (req, res) => {
+      try {
+        // Check if user can manage members (only owners)
+        const canManage = await storage.canUserManageMembers(
+          req.user!.id,
+          req.params.projectId
+        );
+        if (!canManage) {
+          return res
+            .status(403)
+            .json({ error: "Only project owners can add members" });
+        }
+
+        const { userId, role = "Viewer" } = req.body;
+
+        if (!userId) {
+          return res.status(400).json({ error: "User ID is required" });
+        }
+
+        // Validate role
+        const validRoles = ["Owner", "Editor", "Viewer"];
+        if (!validRoles.includes(role)) {
+          return res
+            .status(400)
+            .json({ error: "Invalid role. Must be Owner, Editor, or Viewer" });
+        }
+
+        // Check if user exists
+        const targetUser = await storage.getUser(userId);
+        if (!targetUser) {
+          return res.status(404).json({ error: "User not found" });
+        }
+
+        // Check if user is already a member
+        const existingRole = await storage.getUserProjectRole(
+          userId,
+          req.params.projectId
+        );
+        if (existingRole) {
+          return res
+            .status(400)
+            .json({ error: "User is already a member of this project" });
+        }
+
+        await storage.addProjectMember(req.params.projectId, userId, role);
+        res.status(201).json({ message: "Member added successfully" });
+      } catch (error) {
+        res.status(500).json({ error: "Failed to add project member" });
+      }
+    }
+  );
+
+  app.put(
+    "/api/projects/:projectId/members/:userId/role",
+    requireAuth,
+    async (req, res) => {
+      try {
+        // Check if user can manage members (only owners)
+        const canManage = await storage.canUserManageMembers(
+          req.user!.id,
+          req.params.projectId
+        );
+        if (!canManage) {
+          return res
+            .status(403)
+            .json({ error: "Only project owners can change member roles" });
+        }
+
+        const { role } = req.body;
+
+        // Validate role
+        const validRoles = ["Owner", "Editor", "Viewer"];
+        if (!validRoles.includes(role)) {
+          return res
+            .status(400)
+            .json({ error: "Invalid role. Must be Owner, Editor, or Viewer" });
+        }
+
+        // Prevent changing your own role
+        if (req.params.userId === req.user!.id) {
+          return res.status(400).json({ error: "Cannot change your own role" });
+        }
+
+        await storage.updateMemberRole(
+          req.params.projectId,
+          req.params.userId,
+          role
+        );
+        res.json({ message: "Member role updated successfully" });
+      } catch (error) {
+        res.status(500).json({ error: "Failed to update member role" });
+      }
+    }
+  );
+
+  app.delete(
+    "/api/projects/:projectId/members/:userId",
+    requireAuth,
+    async (req, res) => {
+      try {
+        // Check if user can manage members (only owners) OR if it's the user removing themselves
+        const canManage = await storage.canUserManageMembers(
+          req.user!.id,
+          req.params.projectId
+        );
+        const isSelfRemoval = req.params.userId === req.user!.id;
+
+        if (!canManage && !isSelfRemoval) {
+          return res.status(403).json({
+            error:
+              "Only project owners can remove members, or users can remove themselves",
+          });
+        }
+
+        // Prevent owner from removing themselves if they're the last owner
+        if (isSelfRemoval) {
+          const members = await storage.getProjectMembers(req.params.projectId);
+          const owners = members.filter((m) => m.role === "Owner");
+          if (owners.length === 1 && owners[0].id === req.user!.id) {
+            return res
+              .status(400)
+              .json({ error: "Cannot remove the last owner from the project" });
+          }
+        }
+
+        await storage.removeProjectMember(
+          req.params.projectId,
+          req.params.userId
+        );
+        res.json({ message: "Member removed successfully" });
+      } catch (error) {
+        res.status(500).json({ error: "Failed to remove project member" });
+      }
+    }
+  );
+
+  // User search for team invitations
+  app.get("/api/users/search", requireAuth, async (req, res) => {
+    try {
+      const { query } = req.query;
+      if (!query || typeof query !== "string" || query.length < 2) {
+        return res
+          .status(400)
+          .json({ error: "Search query must be at least 2 characters" });
+      }
+
+      // For now, we'll implement a simple username search
+      // In production, you might want to implement more sophisticated search
+      const user = await storage.getUserByUsername(query);
+      const results = user
+        ? [{ id: user.id, username: user.username, email: user.email }]
+        : [];
+
+      res.json(results);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to search users" });
     }
   });
 
@@ -113,15 +317,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     upload.single("file"),
     async (req, res) => {
       try {
-        // Authorization check: verify user has access to project
-        const hasAccess = await storage.verifyProjectAccess(
+        // Authorization check: verify user can edit the project (Editor or Owner)
+        const canEdit = await storage.canUserEditProject(
           req.user!.id,
           req.params.projectId
         );
-        if (!hasAccess) {
-          return res
-            .status(403)
-            .json({ error: "Access denied to this project" });
+        if (!canEdit) {
+          return res.status(403).json({
+            error: "You need Editor or Owner permissions to upload files",
+          });
         }
 
         if (!req.file) {
@@ -168,6 +372,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Validate with Zod schema
         const validated = insertFileSchema.parse(fileData);
         const file = await storage.createFile(validated);
+
+        // Send notification about document upload
+        try {
+          const { notificationHelper } = await import("./notification-helper");
+          await notificationHelper.notifyDocumentChange(
+            file.id,
+            req.user!.id,
+            "created"
+          );
+        } catch (notificationError) {
+          console.error(
+            "Failed to send document upload notification:",
+            notificationError
+          );
+          // Don't fail the request if notification fails
+        }
+
         res.status(201).json(file);
       } catch (error) {
         console.error("File upload error:", error);
@@ -184,12 +405,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/projects/:projectId/files", requireAuth, async (req, res) => {
     try {
-      // Authorization check: verify user has access to project
-      const hasAccess = await storage.verifyProjectAccess(
+      // Authorization check: verify user can view the project (any role)
+      const canView = await storage.canUserViewProject(
         req.user!.id,
         req.params.projectId
       );
-      if (!hasAccess) {
+      if (!canView) {
         return res.status(403).json({ error: "Access denied to this project" });
       }
 
@@ -202,13 +423,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/files/:fileId", requireAuth, async (req, res) => {
     try {
-      // Authorization check: verify user has access to file's project
+      // Authorization check: verify user has access to file's project and can edit
       const projectId = await storage.verifyFileAccess(
         req.user!.id,
         req.params.fileId
       );
       if (!projectId) {
         return res.status(403).json({ error: "Access denied to this file" });
+      }
+
+      // Check if user can edit the project (Editor or Owner)
+      const canEdit = await storage.canUserEditProject(req.user!.id, projectId);
+      if (!canEdit) {
+        return res.status(403).json({
+          error: "You need Editor or Owner permissions to delete files",
+        });
       }
 
       await storage.deleteFile(req.params.fileId);
@@ -345,18 +574,138 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Citation routes
+  app.post("/api/citations/generate", requireAuth, async (req, res) => {
+    try {
+      const { source, sourceType, format, extractedInfo } = req.body;
+
+      // Input validation
+      if (!source || !sourceType || !format) {
+        return res.status(400).json({
+          error: "source, sourceType, and format are required",
+        });
+      }
+
+      const supportedFormats = ["apa", "mla", "chicago", "harvard", "ieee"];
+      if (!supportedFormats.includes(format)) {
+        return res.status(400).json({
+          error: `Format must be one of: ${supportedFormats.join(", ")}`,
+        });
+      }
+
+      const supportedTypes = ["url", "doi", "text", "manual"];
+      if (!supportedTypes.includes(sourceType)) {
+        return res.status(400).json({
+          error: `Source type must be one of: ${supportedTypes.join(", ")}`,
+        });
+      }
+
+      const citation = await citationService.generateCitation({
+        source,
+        sourceType,
+        format,
+        extractedInfo,
+      });
+
+      res.json(citation);
+    } catch (error) {
+      console.error("Citation generation error:", error);
+      res.status(500).json({ error: "Failed to generate citation" });
+    }
+  });
+
+  app.post("/api/citations/validate", requireAuth, async (req, res) => {
+    try {
+      const { citation, format } = req.body;
+
+      if (!citation || !format) {
+        return res.status(400).json({
+          error: "citation and format are required",
+        });
+      }
+
+      const validation = await citationService.validateCitation(
+        citation,
+        format
+      );
+      res.json(validation);
+    } catch (error) {
+      console.error("Citation validation error:", error);
+      res.status(500).json({ error: "Failed to validate citation" });
+    }
+  });
+
+  app.post("/api/citations/convert", requireAuth, async (req, res) => {
+    try {
+      const { citation, newFormat } = req.body;
+
+      if (!citation || !newFormat) {
+        return res.status(400).json({
+          error: "citation and newFormat are required",
+        });
+      }
+
+      const convertedCitation = await citationService.convertCitationFormat(
+        citation,
+        newFormat
+      );
+      res.json(convertedCitation);
+    } catch (error) {
+      console.error("Citation conversion error:", error);
+      res.status(500).json({ error: "Failed to convert citation format" });
+    }
+  });
+
+  app.post("/api/citations/bibliography", requireAuth, async (req, res) => {
+    try {
+      const { citations, format } = req.body;
+
+      if (!citations || !Array.isArray(citations) || !format) {
+        return res.status(400).json({
+          error: "citations array and format are required",
+        });
+      }
+
+      const bibliography = await citationService.generateBibliography(
+        citations,
+        format
+      );
+      res.json({ bibliography });
+    } catch (error) {
+      console.error("Bibliography generation error:", error);
+      res.status(500).json({ error: "Failed to generate bibliography" });
+    }
+  });
+
+  app.get("/api/citations/formats", requireAuth, async (req, res) => {
+    try {
+      const formats = {
+        apa: citationService.getFormatGuidelines("apa"),
+        mla: citationService.getFormatGuidelines("mla"),
+        chicago: citationService.getFormatGuidelines("chicago"),
+        harvard: citationService.getFormatGuidelines("harvard"),
+        ieee: citationService.getFormatGuidelines("ieee"),
+      };
+
+      res.json(formats);
+    } catch (error) {
+      console.error("Format guidelines error:", error);
+      res.status(500).json({ error: "Failed to get format guidelines" });
+    }
+  });
+
   // Chat routes
   app.post(
     "/api/projects/:projectId/conversations",
     requireAuth,
     async (req, res) => {
       try {
-        // Authorization check: verify user has access to project
-        const hasAccess = await storage.verifyProjectAccess(
+        // Authorization check: verify user can view the project (any role can create conversations)
+        const canView = await storage.canUserViewProject(
           req.user!.id,
           req.params.projectId
         );
-        if (!hasAccess) {
+        if (!canView) {
           return res
             .status(403)
             .json({ error: "Access denied to this project" });
@@ -527,13 +876,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Task management routes
   app.post("/api/projects/:projectId/tasks", requireAuth, async (req, res) => {
     try {
-      // Authorization check: verify user has access to project
-      const hasAccess = await storage.verifyProjectAccess(
+      // Authorization check: verify user can edit the project (Editor or Owner)
+      const canEdit = await storage.canUserEditProject(
         req.user!.id,
         req.params.projectId
       );
-      if (!hasAccess) {
-        return res.status(403).json({ error: "Access denied to this project" });
+      if (!canEdit) {
+        return res.status(403).json({
+          error: "You need Editor or Owner permissions to create tasks",
+        });
       }
 
       const taskData = {
@@ -545,6 +896,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate with Zod schema
       const validated = insertTaskSchema.parse(taskData);
       const task = await storage.createTask(validated);
+
+      // Send notification about task assignment if task is assigned to someone
+      if (task.assignedTo && task.assignedTo !== req.user!.id) {
+        try {
+          const { notificationHelper } = await import("./notification-helper");
+          await notificationHelper.notifyTaskAssignment(
+            task.id,
+            task.assignedTo,
+            req.user!.id
+          );
+        } catch (notificationError) {
+          console.error(
+            "Failed to send task assignment notification:",
+            notificationError
+          );
+          // Don't fail the request if notification fails
+        }
+      }
+
       res.status(201).json(task);
     } catch (error) {
       if (error instanceof Error && error.name === "ZodError") {
@@ -558,12 +928,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/projects/:projectId/tasks", requireAuth, async (req, res) => {
     try {
-      // Authorization check: verify user has access to project
-      const hasAccess = await storage.verifyProjectAccess(
+      // Authorization check: verify user can view the project (any role)
+      const canView = await storage.canUserViewProject(
         req.user!.id,
         req.params.projectId
       );
-      if (!hasAccess) {
+      if (!canView) {
         return res.status(403).json({ error: "Access denied to this project" });
       }
 
@@ -576,13 +946,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/tasks/:taskId/status", requireAuth, async (req, res) => {
     try {
-      // Authorization check: verify user has access to task
+      // Authorization check: verify user has access to task and can edit
       const projectId = await storage.verifyTaskAccess(
         req.user!.id,
         req.params.taskId
       );
       if (!projectId) {
         return res.status(403).json({ error: "Access denied to this task" });
+      }
+
+      // Check if user can edit the project (Editor or Owner)
+      const canEdit = await storage.canUserEditProject(req.user!.id, projectId);
+      if (!canEdit) {
+        return res.status(403).json({
+          error: "You need Editor or Owner permissions to update tasks",
+        });
       }
 
       const { status, progress } = req.body;
@@ -605,11 +983,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await storage.updateTaskStatus(req.params.taskId, status, progress);
+
+      // Send notification about task status change
+      try {
+        const { notificationHelper } = await import("./notification-helper");
+        await notificationHelper.notifyTaskStatusChange(
+          req.params.taskId,
+          status,
+          req.user!.id
+        );
+      } catch (notificationError) {
+        console.error(
+          "Failed to send task status notification:",
+          notificationError
+        );
+        // Don't fail the request if notification fails
+      }
+
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to update task" });
     }
   });
+
+  // Notification Routes
+  // Get user notifications
+  app.get("/api/notifications", requireAuth, async (req, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+      const notifications = await storage.getUserNotifications(
+        req.user!.id,
+        limit
+      );
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+  });
+
+  // Get unread notification count
+  app.get("/api/notifications/unread-count", requireAuth, async (req, res) => {
+    try {
+      const count = await storage.getUnreadNotificationCount(req.user!.id);
+      res.json({ count });
+    } catch (error) {
+      console.error("Error fetching unread notification count:", error);
+      res.status(500).json({ error: "Failed to fetch unread count" });
+    }
+  });
+
+  // Mark notification as read
+  app.patch(
+    "/api/notifications/:notificationId/read",
+    requireAuth,
+    async (req, res) => {
+      try {
+        await storage.markNotificationAsRead(req.params.notificationId);
+        res.status(204).send();
+      } catch (error) {
+        console.error("Error marking notification as read:", error);
+        res.status(500).json({ error: "Failed to mark notification as read" });
+      }
+    }
+  );
+
+  // Mark all notifications as read
+  app.patch(
+    "/api/notifications/mark-all-read",
+    requireAuth,
+    async (req, res) => {
+      try {
+        await storage.markAllNotificationsAsRead(req.user!.id);
+        res.status(204).send();
+      } catch (error) {
+        console.error("Error marking all notifications as read:", error);
+        res
+          .status(500)
+          .json({ error: "Failed to mark all notifications as read" });
+      }
+    }
+  );
+
+  // Delete notification
+  app.delete(
+    "/api/notifications/:notificationId",
+    requireAuth,
+    async (req, res) => {
+      try {
+        await storage.deleteNotification(req.params.notificationId);
+        res.status(204).send();
+      } catch (error) {
+        console.error("Error deleting notification:", error);
+        res.status(500).json({ error: "Failed to delete notification" });
+      }
+    }
+  );
 
   const httpServer = createServer(app);
   return httpServer;

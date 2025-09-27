@@ -12,11 +12,15 @@ import {
   Plus,
   Settings,
   Share,
+  Crown,
+  Edit,
+  Eye,
 } from "lucide-react";
 import AIToolsPanel from "@/components/AIToolsPanel";
 import FileUploadZone from "@/components/FileUploadZone";
 import ChatInterface from "@/components/ChatInterface";
 import TaskDashboard from "@/components/TaskDashboard";
+import { TeamManagement } from "@/components/TeamManagement";
 
 interface Project {
   id: string;
@@ -25,6 +29,7 @@ interface Project {
   ownerId: string;
   createdAt: string;
   updatedAt: string;
+  role: "Owner" | "Editor" | "Viewer";
 }
 
 interface ProjectDashboardProps {
@@ -50,6 +55,12 @@ export default function ProjectDashboard({
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold">{project.name}</h1>
               <Badge variant="outline">Active</Badge>
+              <Badge variant="secondary" className="gap-1">
+                {project.role === "Owner" && <Crown className="h-3 w-3" />}
+                {project.role === "Editor" && <Edit className="h-3 w-3" />}
+                {project.role === "Viewer" && <Eye className="h-3 w-3" />}
+                {project.role}
+              </Badge>
             </div>
             {project.description && (
               <p className="text-muted-foreground mt-1">
@@ -131,11 +142,12 @@ export default function ProjectDashboard({
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="research">Research Assistant</TabsTrigger>
           <TabsTrigger value="tasks">Task Management</TabsTrigger>
           <TabsTrigger value="chat">Team Chat</TabsTrigger>
+          <TabsTrigger value="team">Team</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6 mt-6">
@@ -256,6 +268,12 @@ export default function ProjectDashboard({
             <div className="h-[700px]">
               <ChatInterface />
             </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="team" className="mt-6">
+          <div className="max-w-4xl mx-auto">
+            <TeamManagement projectId={project.id} userRole={project.role} />
           </div>
         </TabsContent>
       </Tabs>

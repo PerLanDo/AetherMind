@@ -13,6 +13,7 @@ import {
   CheckSquare,
   Upload,
   PenTool,
+  BookOpen,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -122,6 +123,12 @@ export default function Sidebar() {
       label: "AI Tools",
       icon: PenTool,
       isActive: location?.startsWith("/ai-tools"),
+    },
+    {
+      path: "/citations",
+      label: "Citations",
+      icon: BookOpen,
+      isActive: location?.startsWith("/citations"),
     },
   ];
 
