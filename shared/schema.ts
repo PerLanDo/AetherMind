@@ -57,6 +57,7 @@ export const files = pgTable("files", {
   originalName: text("original_name").notNull(),
   mimeType: text("mime_type").notNull(),
   size: integer("size").notNull(),
+  cloudKey: text("cloud_key"), // Backblaze B2 storage key
   projectId: varchar("project_id")
     .references(() => projects.id)
     .notNull(),

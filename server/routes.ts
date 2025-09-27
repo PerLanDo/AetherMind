@@ -2,10 +2,18 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
+import { StorageService } from "./storage-service";
 import { storage } from "./storage";
 import { aiService } from "./ai-service";
 import { citationService } from "./citation-service";
+import { literatureService } from "./literature-service";
+import { outlineService } from "./outline-service";
+import { dataAnalysisService } from "./data-analysis-service";
 import { setupAuth } from "./auth";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
+import { files } from "@shared/schema";
 import {
   insertProjectSchema,
   insertFileSchema,
@@ -1079,6 +1087,678 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
   );
+
+  // Literature discovery routes
+  app.post("/api/literature/search", requireAuth, async (req, res) => {
+    try {
+      const { query, keywords, subject, dateRange, maxResults, projectId } =
+        req.body;
+
+      if (!query?.trim()) {
+        return res.status(400).json({ error: "Search query is required" });
+      }
+
+      // Get document context from project if provided
+      let documentContext = "";
+      if (projectId) {
+        const canView = await storage.canUserViewProject(
+          req.user!.id,
+          projectId
+        );
+        if (!canView) {
+          return res
+            .status(403)
+            .json({ error: "Access denied to this project" });
+        }
+
+        // Get recent project files for context
+        const files = await storage.getProjectFiles(projectId);
+        const recentFiles = files.slice(0, 3); // Use up to 3 most recent files for context
+        documentContext = recentFiles
+          .map((file) => file.content)
+          .filter(Boolean)
+          .join("\n\n")
+          .substring(0, 2000); // Limit context size
+      }
+
+      const literatureRequest = {
+        query: query.trim(),
+        keywords: keywords || [],
+        subject,
+        dateRange,
+        maxResults: Math.min(maxResults || 15, 50),
+        documentContext,
+      };
+
+      const results = await literatureService.searchLiterature(
+        literatureRequest
+      );
+      res.json(results);
+    } catch (error) {
+      console.error("Literature search error:", error);
+      res.status(500).json({ error: "Failed to search literature" });
+    }
+  });
+
+  app.post(
+    "/api/literature/suggest-from-document",
+    requireAuth,
+    async (req, res) => {
+      try {
+        const { fileId, maxResults } = req.body;
+
+        if (!fileId) {
+          return res.status(400).json({ error: "File ID is required" });
+        }
+
+        // Verify user has access to the file
+        const projectId = await storage.verifyFileAccess(req.user!.id, fileId);
+        if (!projectId) {
+          return res.status(403).json({ error: "Access denied to this file" });
+        }
+
+        const file = await storage.getFile(fileId);
+        if (!file) {
+          return res.status(404).json({ error: "File not found" });
+        }
+
+        if (!file.content) {
+          return res
+            .status(400)
+            .json({ error: "File content not available for analysis" });
+        }
+
+        const results = await literatureService.suggestFromDocument(
+          file.content,
+          file.originalName,
+          maxResults || 10
+        );
+
+        res.json(results);
+      } catch (error) {
+        console.error("Document-based literature suggestion error:", error);
+        res
+          .status(500)
+          .json({ error: "Failed to generate literature suggestions" });
+      }
+    }
+  );
+
+  // Get literature search history (optional enhancement)
+  app.get("/api/literature/history", requireAuth, async (req, res) => {
+    try {
+      // This could be implemented to store and retrieve search history
+      // For now, return empty array
+      res.json({ searches: [] });
+    } catch (error) {
+      console.error("Literature history error:", error);
+      res.status(500).json({ error: "Failed to fetch literature history" });
+    }
+  });
+
+  // Outline builder routes
+  app.post("/api/outline/generate", requireAuth, async (req, res) => {
+    try {
+      const {
+        topic,
+        type,
+        length,
+        customLength,
+        style,
+        requirements,
+        sources,
+        existingContent,
+      } = req.body;
+
+      if (!topic?.trim()) {
+        return res.status(400).json({ error: "Topic is required" });
+      }
+
+      if (
+        !type ||
+        ![
+          "thesis",
+          "essay",
+          "research-paper",
+          "dissertation",
+          "report",
+          "article",
+        ].includes(type)
+      ) {
+        return res
+          .status(400)
+          .json({ error: "Valid document type is required" });
+      }
+
+      const outlineRequest = {
+        topic: topic.trim(),
+        type,
+        length: length || "medium",
+        customLength,
+        style: style || "academic",
+        requirements,
+        sources,
+        existingContent,
+      };
+
+      const outline = await outlineService.generateOutline(outlineRequest);
+      res.json(outline);
+    } catch (error) {
+      console.error("Outline generation error:", error);
+      res.status(500).json({ error: "Failed to generate outline" });
+    }
+  });
+
+  app.post("/api/outline/generate-draft", requireAuth, async (req, res) => {
+    try {
+      const {
+        outlineSection,
+        context,
+        previousSections,
+        targetWordCount,
+        tone,
+        includeTransitions,
+      } = req.body;
+
+      if (!outlineSection || !outlineSection.title) {
+        return res.status(400).json({ error: "Outline section is required" });
+      }
+
+      const draftRequest = {
+        outlineSection,
+        context,
+        previousSections,
+        targetWordCount,
+        tone: tone || "academic",
+        includeTransitions: includeTransitions !== false,
+      };
+
+      const draft = await outlineService.generateSectionDraft(draftRequest);
+      res.json(draft);
+    } catch (error) {
+      console.error("Draft generation error:", error);
+      res.status(500).json({ error: "Failed to generate section draft" });
+    }
+  });
+
+  app.post("/api/outline/improve", requireAuth, async (req, res) => {
+    try {
+      const { outline, feedback, type } = req.body;
+
+      if (!outline || !Array.isArray(outline)) {
+        return res
+          .status(400)
+          .json({ error: "Valid outline array is required" });
+      }
+
+      if (!feedback?.trim()) {
+        return res.status(400).json({ error: "Feedback is required" });
+      }
+
+      const improvedOutline = await outlineService.improveOutline(
+        outline,
+        feedback.trim(),
+        type || "essay"
+      );
+
+      res.json({ outline: improvedOutline });
+    } catch (error) {
+      console.error("Outline improvement error:", error);
+      res.status(500).json({ error: "Failed to improve outline" });
+    }
+  });
+
+  app.post("/api/outline/export", requireAuth, async (req, res) => {
+    try {
+      const { outline, format } = req.body;
+
+      if (!outline || !Array.isArray(outline)) {
+        return res
+          .status(400)
+          .json({ error: "Valid outline array is required" });
+      }
+
+      if (!format || !["markdown", "word", "latex", "json"].includes(format)) {
+        return res.status(400).json({
+          error:
+            "Valid export format is required (markdown, word, latex, json)",
+        });
+      }
+
+      const exportedContent = await outlineService.exportOutline(
+        outline,
+        format
+      );
+
+      const contentTypes = {
+        markdown: "text/markdown",
+        word: "text/plain",
+        latex: "text/x-latex",
+        json: "application/json",
+      };
+
+      const extensions = {
+        markdown: "md",
+        word: "txt",
+        latex: "tex",
+        json: "json",
+      };
+
+      res.setHeader(
+        "Content-Type",
+        contentTypes[format as keyof typeof contentTypes]
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="outline.${
+          extensions[format as keyof typeof extensions]
+        }"`
+      );
+      res.send(exportedContent);
+    } catch (error) {
+      console.error("Outline export error:", error);
+      res.status(500).json({ error: "Failed to export outline" });
+    }
+  });
+
+  // Data analysis routes
+  app.post("/api/analysis/analyze", requireAuth, async (req, res) => {
+    try {
+      const { data, analysisType, variables, language, question, parameters } =
+        req.body;
+
+      if (
+        !analysisType ||
+        ![
+          "descriptive_stats",
+          "correlation",
+          "regression",
+          "visualization",
+          "hypothesis_test",
+          "code_generation",
+          "data_cleaning",
+          "exploratory",
+        ].includes(analysisType)
+      ) {
+        return res
+          .status(400)
+          .json({ error: "Valid analysis type is required" });
+      }
+
+      const analysisRequest = {
+        data,
+        analysisType,
+        variables,
+        language: language || "python",
+        question,
+        parameters,
+      };
+
+      const results = await dataAnalysisService.analyzeData(analysisRequest);
+      res.json(results);
+    } catch (error) {
+      console.error("Data analysis error:", error);
+      res.status(500).json({ error: "Failed to perform data analysis" });
+    }
+  });
+
+  app.post("/api/analysis/generate-code", requireAuth, async (req, res) => {
+    try {
+      const { analysisType, language, data, question, variables } = req.body;
+
+      if (!analysisType) {
+        return res.status(400).json({ error: "Analysis type is required" });
+      }
+
+      const codeRequest = {
+        analysisType,
+        language: language || "python",
+        data,
+        question,
+        variables,
+      };
+
+      const codeResult = await dataAnalysisService.generateAnalysisCode(
+        codeRequest
+      );
+      res.json(codeResult);
+    } catch (error) {
+      console.error("Code generation error:", error);
+      res.status(500).json({ error: "Failed to generate analysis code" });
+    }
+  });
+
+  app.post("/api/analysis/basic-stats", requireAuth, async (req, res) => {
+    try {
+      const { data } = req.body;
+
+      if (!data || !Array.isArray(data)) {
+        return res
+          .status(400)
+          .json({ error: "Numeric data array is required" });
+      }
+
+      const numericData = data.filter((val) => typeof val === "number");
+
+      if (numericData.length === 0) {
+        return res
+          .status(400)
+          .json({ error: "No numeric values found in data" });
+      }
+
+      const stats = dataAnalysisService.calculateBasicStats(numericData);
+      res.json(stats);
+    } catch (error) {
+      console.error("Basic stats calculation error:", error);
+      res.status(500).json({ error: "Failed to calculate basic statistics" });
+    }
+  });
+
+  app.post("/api/analysis/correlation", requireAuth, async (req, res) => {
+    try {
+      const { x, y } = req.body;
+
+      if (!Array.isArray(x) || !Array.isArray(y)) {
+        return res
+          .status(400)
+          .json({ error: "Two numeric arrays (x and y) are required" });
+      }
+
+      const numericX = x.filter((val) => typeof val === "number");
+      const numericY = y.filter((val) => typeof val === "number");
+
+      if (numericX.length === 0 || numericY.length === 0) {
+        return res
+          .status(400)
+          .json({ error: "No numeric values found in provided arrays" });
+      }
+
+      if (numericX.length !== numericY.length) {
+        return res
+          .status(400)
+          .json({ error: "Arrays must have the same length" });
+      }
+
+      const correlation = dataAnalysisService.calculateCorrelation(
+        numericX,
+        numericY
+      );
+      res.json(correlation);
+    } catch (error) {
+      console.error("Correlation calculation error:", error);
+      res.status(500).json({ error: "Failed to calculate correlation" });
+    }
+  });
+
+  app.post("/api/analysis/parse-data", requireAuth, async (req, res) => {
+    try {
+      const { dataString } = req.body;
+
+      if (!dataString?.trim()) {
+        return res.status(400).json({ error: "Data string is required" });
+      }
+
+      const parsed = dataAnalysisService.parseDataString(dataString);
+      res.json(parsed);
+    } catch (error) {
+      console.error("Data parsing error:", error);
+      res.status(500).json({ error: "Failed to parse data string" });
+    }
+  });
+
+  // Upload file endpoint
+  app.post(
+    "/api/files/upload",
+    requireAuth,
+    upload.single("file"),
+    async (req, res) => {
+      try {
+        const file = req.file;
+        const { projectId } = req.body;
+
+        if (!file) {
+          return res.status(400).json({ error: "No file uploaded" });
+        }
+
+        if (!projectId) {
+          return res.status(400).json({ error: "Project ID is required" });
+        }
+
+        // Check if user can edit the project
+        const canEdit = await storage.canUserEditProject(
+          req.user!.id,
+          projectId
+        );
+        if (!canEdit) {
+          return res.status(403).json({
+            error: "You need Editor or Owner permissions to upload files",
+          });
+        }
+
+        // Upload to Backblaze B2
+        const uploadResult = await StorageService.uploadFile(
+          file.buffer,
+          file.originalname,
+          file.mimetype,
+          req.user!.id
+        );
+
+        // Extract text content for AI analysis
+        const content = await aiService.extractTextContent(
+          file.originalname,
+          file.mimetype,
+          file.buffer
+        );
+
+        // Save file metadata to database
+        const [newFile] = await db
+          .insert(files)
+          .values({
+            name: file.originalname,
+            originalName: file.originalname,
+            mimeType: file.mimetype,
+            size: uploadResult.size,
+            cloudKey: uploadResult.cloudKey,
+            projectId: projectId,
+            uploadedBy: req.user!.id,
+            content: content,
+            metadata: {
+              originalSize: file.size,
+              uploadedAt: new Date().toISOString(),
+            },
+          })
+          .returning();
+
+        res.json(newFile);
+      } catch (error) {
+        console.error("Upload error:", error);
+        res.status(500).json({ error: "Failed to upload file" });
+      }
+    }
+  );
+
+  // Download file endpoint - return signed URL
+  app.get("/api/files/:id/download", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const [file] = await db.select().from(files).where(eq(files.id, id));
+
+      if (!file) {
+        return res.status(404).json({ error: "File not found" });
+      }
+
+      // Check if user can view the project
+      const canView = await storage.canUserViewProject(
+        req.user!.id,
+        file.projectId
+      );
+      if (!canView) {
+        return res.status(403).json({ error: "Access denied to this file" });
+      }
+
+      if (!file.cloudKey) {
+        // Fallback for files without cloudKey (old files)
+        return res.json({ content: file.content, isLegacy: true });
+      }
+
+      // Generate signed URL for download
+      const signedUrl = await StorageService.getSignedDownloadUrl(
+        file.cloudKey,
+        3600
+      );
+
+      res.json({
+        downloadUrl: signedUrl.url,
+        expiresIn: signedUrl.expiresIn,
+        fileName: file.name,
+        mimeType: file.mimeType,
+      });
+    } catch (error) {
+      console.error("Download error:", error);
+      res.status(500).json({ error: "Failed to generate download URL" });
+    }
+  });
+
+  // Get file content for editing
+  app.get("/api/files/:id/content", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const [file] = await db.select().from(files).where(eq(files.id, id));
+
+      if (!file) {
+        return res.status(404).json({ error: "File not found" });
+      }
+
+      // Check if user can view the project
+      const canView = await storage.canUserViewProject(
+        req.user!.id,
+        file.projectId
+      );
+      if (!canView) {
+        return res.status(403).json({ error: "Access denied to this file" });
+      }
+
+      if (!file.cloudKey) {
+        // Fallback for legacy files
+        return res.json({ content: file.content });
+      }
+
+      // Download content from cloud for editing
+      const buffer = await StorageService.downloadFile(file.cloudKey);
+      const content = buffer.toString("utf-8");
+
+      res.json({ content });
+    } catch (error) {
+      console.error("Content fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch file content" });
+    }
+  });
+
+  // Update file content
+  app.put("/api/files/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { content } = req.body;
+
+      const [existingFile] = await db
+        .select()
+        .from(files)
+        .where(eq(files.id, id));
+
+      if (!existingFile) {
+        return res.status(404).json({ error: "File not found" });
+      }
+
+      // Check if user can edit the project
+      const canEdit = await storage.canUserEditProject(
+        req.user!.id,
+        existingFile.projectId
+      );
+      if (!canEdit) {
+        return res.status(403).json({
+          error: "You need Editor or Owner permissions to update files",
+        });
+      }
+
+      // Upload updated content to cloud
+      const buffer = Buffer.from(content, "utf-8");
+      const uploadResult = await StorageService.uploadFile(
+        buffer,
+        existingFile.name,
+        existingFile.mimeType || "text/plain",
+        req.user!.id
+      );
+
+      // Delete old version if it exists
+      if (existingFile.cloudKey) {
+        try {
+          await StorageService.deleteFile(existingFile.cloudKey);
+        } catch (error) {
+          console.warn("Failed to delete old version:", error);
+        }
+      }
+
+      // Update database record
+      const [updatedFile] = await db
+        .update(files)
+        .set({
+          content: content,
+          updatedAt: new Date(),
+          cloudKey: uploadResult.cloudKey,
+          size: uploadResult.size,
+        })
+        .where(eq(files.id, id))
+        .returning();
+
+      res.json(updatedFile);
+    } catch (error) {
+      console.error("Update error:", error);
+      res.status(500).json({ error: "Failed to update file" });
+    }
+  });
+
+  // Delete file endpoint
+  app.delete("/api/files/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const [file] = await db.select().from(files).where(eq(files.id, id));
+
+      if (!file) {
+        return res.status(404).json({ error: "File not found" });
+      }
+
+      // Check if user can edit the project
+      const canEdit = await storage.canUserEditProject(
+        req.user!.id,
+        file.projectId
+      );
+      if (!canEdit) {
+        return res.status(403).json({
+          error: "You need Editor or Owner permissions to delete files",
+        });
+      }
+
+      // Delete from cloud storage
+      if (file.cloudKey) {
+        try {
+          await StorageService.deleteFile(file.cloudKey);
+        } catch (error) {
+          console.warn("Failed to delete from cloud storage:", error);
+        }
+      }
+
+      // Delete from database
+      await db.delete(files).where(eq(files.id, id));
+
+      res.json({ message: "File deleted successfully" });
+    } catch (error) {
+      console.error("Delete error:", error);
+      res.status(500).json({ error: "Failed to delete file" });
+    }
+  });
 
   const httpServer = createServer(app);
   return httpServer;

@@ -21,6 +21,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import WritingAssistant from "@/components/WritingAssistant";
+import CitationGenerator from "@/components/CitationGenerator";
+import LiteratureSearch from "@/components/LiteratureSearch";
+import OutlineBuilder from "@/components/OutlineBuilder";
+import DataAnalysisHelper from "@/components/DataAnalysisHelper";
 
 interface AITool {
   id: string;
@@ -34,6 +38,10 @@ interface AITool {
 export default function AIToolsPanel() {
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [showWritingAssistant, setShowWritingAssistant] = useState(false);
+  const [showCitationGenerator, setShowCitationGenerator] = useState(false);
+  const [showLiteratureSearch, setShowLiteratureSearch] = useState(false);
+  const [showOutlineBuilder, setShowOutlineBuilder] = useState(false);
+  const [showDataAnalysis, setShowDataAnalysis] = useState(false);
 
   const writingTools = [
     "grammar",
@@ -51,8 +59,24 @@ export default function AIToolsPanel() {
 
   const handleToolActivation = (toolId: string) => {
     setSelectedTool(toolId);
+
+    // Reset all tool states
+    setShowWritingAssistant(false);
+    setShowCitationGenerator(false);
+    setShowLiteratureSearch(false);
+    setShowOutlineBuilder(false);
+    setShowDataAnalysis(false);
+
     if (writingTools.includes(toolId)) {
       setShowWritingAssistant(true);
+    } else if (toolId === "citation") {
+      setShowCitationGenerator(true);
+    } else if (toolId === "literature") {
+      setShowLiteratureSearch(true);
+    } else if (toolId === "outline") {
+      setShowOutlineBuilder(true);
+    } else if (toolId === "analysis") {
+      setShowDataAnalysis(true);
     } else {
       console.log(`${toolId} activated`);
     }
@@ -177,7 +201,7 @@ export default function AIToolsPanel() {
       title: "Outline & Draft Builder",
       description: "Structure your thesis or essays",
       icon: BookOpen,
-      status: "coming-soon",
+      status: "available",
       action: () => handleToolActivation("outline"),
     },
     {
@@ -185,7 +209,7 @@ export default function AIToolsPanel() {
       title: "Data Analysis Helper",
       description: "Basic statistics and coding assistance",
       icon: BarChart3,
-      status: "coming-soon",
+      status: "available",
       action: () => handleToolActivation("analysis"),
     },
   ];
@@ -269,6 +293,35 @@ export default function AIToolsPanel() {
           selectedTool={selectedTool}
           onClose={() => {
             setShowWritingAssistant(false);
+            setSelectedTool(null);
+          }}
+        />
+      )}
+
+      {showCitationGenerator && <CitationGenerator />}
+
+      {showLiteratureSearch && (
+        <LiteratureSearch
+          onClose={() => {
+            setShowLiteratureSearch(false);
+            setSelectedTool(null);
+          }}
+        />
+      )}
+
+      {showOutlineBuilder && (
+        <OutlineBuilder
+          onClose={() => {
+            setShowOutlineBuilder(false);
+            setSelectedTool(null);
+          }}
+        />
+      )}
+
+      {showDataAnalysis && (
+        <DataAnalysisHelper
+          onClose={() => {
+            setShowDataAnalysis(false);
             setSelectedTool(null);
           }}
         />

@@ -106,8 +106,45 @@ export default function FileUploadZone({
     console.log("View file:", fileId);
   };
 
-  const handleDownloadFile = (fileId: string) => {
-    console.log("Download file:", fileId);
+  const handleDownloadFile = async (fileId: string) => {
+    try {
+      // Get signed download URL from backend
+      const response = await fetch(`/api/files/${fileId}/download`, {
+        method: "GET",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to get download URL");
+      }
+
+      const data = await response.json();
+
+      if (data.isLegacy) {
+        // Handle legacy files that don't use cloud storage
+        const blob = new Blob([data.content], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `file-${fileId}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else {
+        // Use signed URL for cloud storage files
+        const a = document.createElement("a");
+        a.href = data.downloadUrl;
+        a.download = data.fileName || `file-${fileId}`;
+        a.target = "_blank";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+    } catch (error) {
+      console.error("Download error:", error);
+      // Could add toast notification here
+    }
   };
 
   return (
