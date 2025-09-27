@@ -7,6 +7,8 @@ import ChatInterface from "./ChatInterface";
 import TaskDashboard from "./TaskDashboard";
 
 export default function Dashboard() {
+  // TODO: Add analytics tracking for tab usage to understand user preferences
+  // TODO: Implement tab persistence across sessions using localStorage
   const [activeTab, setActiveTab] = useState("research");
 
   return (

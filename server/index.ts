@@ -1,4 +1,6 @@
 // Load environment variables FIRST before any other imports
+// TODO: Implement secure environment variable validation and encryption
+// TODO: Add environment-specific configuration management (dev/staging/prod)
 import path from "path";
 import fs from "fs";
 import { config } from "dotenv";
