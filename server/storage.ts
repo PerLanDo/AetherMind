@@ -6,6 +6,9 @@ import {
   conversations,
   messages,
   tasks,
+  userRoles,
+  teams,
+  teamMembers,
   type User,
   type InsertUser,
   type Project,
@@ -18,6 +21,12 @@ import {
   type InsertMessage,
   type Task,
   type InsertTask,
+  type UserRole,
+  type InsertUserRole,
+  type Team,
+  type InsertTeam,
+  type TeamMember,
+  type InsertTeamMember,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, or, ilike } from "drizzle-orm";
@@ -78,6 +87,23 @@ export interface IStorage {
 
   // Data management
   clearAllUserData(userId: string): Promise<void>;
+
+  // Role management methods
+  getUserRoles(userId: string): Promise<UserRole[]>;
+  getUserRolesForProject(userId: string, projectId: string): Promise<UserRole[]>;
+  assignUserRole(userId: string, role: string, projectId?: string): Promise<UserRole>;
+  removeUserRole(userId: string, role: string, projectId?: string): Promise<void>;
+  updateUserRole(userId: string, oldRole: string, newRole: string, projectId?: string): Promise<void>;
+
+  // Team management methods
+  createTeam(team: InsertTeam): Promise<Team>;
+  getTeam(teamId: number): Promise<Team | undefined>;
+  getUserTeams(userId: string): Promise<Team[]>;
+  getTeamMembers(teamId: number): Promise<(TeamMember & { user: User })[]>;
+  addTeamMember(teamId: number, userId: string, role: string): Promise<TeamMember>;
+  removeTeamMember(teamId: number, userId: string): Promise<void>;
+  updateTeamMemberRole(teamId: number, userId: string, newRole: string): Promise<void>;
+  getTeamMembership(userId: string, teamId: number): Promise<TeamMember | undefined>;
 
   sessionStore: any;
 }
@@ -430,6 +456,195 @@ export class DatabaseStorage implements IStorage {
     }
 
     console.log(`Cleared all data for user: ${userId}`);
+  }
+
+  // Role management methods
+  async getUserRoles(userId: string): Promise<UserRole[]> {
+    return await db
+      .select()
+      .from(userRoles)
+      .where(eq(userRoles.userId, userId));
+  }
+
+  async getUserRolesForProject(userId: string, projectId: string): Promise<UserRole[]> {
+    return await db
+      .select()
+      .from(userRoles)
+      .where(
+        and(
+          eq(userRoles.userId, userId),
+          eq(userRoles.projectId, projectId)
+        )
+      );
+  }
+
+  async assignUserRole(userId: string, role: string, projectId?: string): Promise<UserRole> {
+    const [userRole] = await db
+      .insert(userRoles)
+      .values({
+        userId,
+        role,
+        projectId: projectId || null,
+      })
+      .returning();
+    return userRole;
+  }
+
+  async removeUserRole(userId: string, role: string, projectId?: string): Promise<void> {
+    if (projectId) {
+      await db
+        .delete(userRoles)
+        .where(
+          and(
+            eq(userRoles.userId, userId),
+            eq(userRoles.role, role),
+            eq(userRoles.projectId, projectId)
+          )
+        );
+    } else {
+      await db
+        .delete(userRoles)
+        .where(
+          and(
+            eq(userRoles.userId, userId),
+            eq(userRoles.role, role)
+          )
+        );
+    }
+  }
+
+  async updateUserRole(userId: string, oldRole: string, newRole: string, projectId?: string): Promise<void> {
+    if (projectId) {
+      await db
+        .update(userRoles)
+        .set({ role: newRole })
+        .where(
+          and(
+            eq(userRoles.userId, userId),
+            eq(userRoles.role, oldRole),
+            eq(userRoles.projectId, projectId)
+          )
+        );
+    } else {
+      await db
+        .update(userRoles)
+        .set({ role: newRole })
+        .where(
+          and(
+            eq(userRoles.userId, userId),
+            eq(userRoles.role, oldRole)
+          )
+        );
+    }
+  }
+
+  // Team management methods
+  async createTeam(team: InsertTeam): Promise<Team> {
+    const [newTeam] = await db
+      .insert(teams)
+      .values(team)
+      .returning();
+    return newTeam;
+  }
+
+  async getTeam(teamId: number): Promise<Team | undefined> {
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, teamId));
+    return team || undefined;
+  }
+
+  async getUserTeams(userId: string): Promise<Team[]> {
+    const result = await db
+      .select({
+        id: teams.id,
+        name: teams.name,
+        ownerId: teams.ownerId,
+        createdAt: teams.createdAt,
+      })
+      .from(teams)
+      .leftJoin(teamMembers, eq(teamMembers.teamId, teams.id))
+      .where(
+        or(
+          eq(teams.ownerId, userId),
+          eq(teamMembers.userId, userId)
+        )
+      );
+    
+    return result;
+  }
+
+  async getTeamMembers(teamId: number): Promise<(TeamMember & { user: User })[]> {
+    const result = await db
+      .select({
+        id: teamMembers.id,
+        teamId: teamMembers.teamId,
+        userId: teamMembers.userId,
+        role: teamMembers.role,
+        invitedAt: teamMembers.invitedAt,
+        user: {
+          id: users.id,
+          username: users.username,
+          email: users.email,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+          password: users.password,
+        },
+      })
+      .from(teamMembers)
+      .innerJoin(users, eq(users.id, teamMembers.userId))
+      .where(eq(teamMembers.teamId, teamId));
+
+    return result;
+  }
+
+  async addTeamMember(teamId: number, userId: string, role: string): Promise<TeamMember> {
+    const [member] = await db
+      .insert(teamMembers)
+      .values({
+        teamId,
+        userId,
+        role,
+      })
+      .returning();
+    return member;
+  }
+
+  async removeTeamMember(teamId: number, userId: string): Promise<void> {
+    await db
+      .delete(teamMembers)
+      .where(
+        and(
+          eq(teamMembers.teamId, teamId),
+          eq(teamMembers.userId, userId)
+        )
+      );
+  }
+
+  async updateTeamMemberRole(teamId: number, userId: string, newRole: string): Promise<void> {
+    await db
+      .update(teamMembers)
+      .set({ role: newRole })
+      .where(
+        and(
+          eq(teamMembers.teamId, teamId),
+          eq(teamMembers.userId, userId)
+        )
+      );
+  }
+
+  async getTeamMembership(userId: string, teamId: number): Promise<TeamMember | undefined> {
+    const [membership] = await db
+      .select()
+      .from(teamMembers)
+      .where(
+        and(
+          eq(teamMembers.userId, userId),
+          eq(teamMembers.teamId, teamId)
+        )
+      );
+    return membership || undefined;
   }
 }
 

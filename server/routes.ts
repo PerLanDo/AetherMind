@@ -11,6 +11,9 @@ import {
   insertTaskSchema,
   insertConversationSchema,
   insertMessageSchema,
+  insertTeamSchema,
+  insertTeamMemberSchema,
+  insertUserRoleSchema,
 } from "@shared/schema";
 
 // Configure multer for file uploads
@@ -608,6 +611,201 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to update task" });
+    }
+  });
+
+  // Role-based user management endpoints
+
+  // Team management endpoints
+  app.post("/api/teams", requireAuth, async (req, res) => {
+    try {
+      const teamData = {
+        ...req.body,
+        ownerId: req.user!.id,
+      };
+
+      const validated = insertTeamSchema.parse(teamData);
+      const team = await storage.createTeam(validated);
+
+      // Automatically add the owner as an admin member of the team
+      await storage.addTeamMember(team.id, req.user!.id, "admin");
+
+      res.status(201).json(team);
+    } catch (error) {
+      if (error instanceof Error && error.name === "ZodError") {
+        return res.status(400).json({
+          error: "Invalid team data",
+          details: (error as any).errors,
+        });
+      }
+      res.status(500).json({ error: "Failed to create team" });
+    }
+  });
+
+  app.get("/api/teams/:id/members", requireAuth, async (req, res) => {
+    try {
+      const teamId = parseInt(req.params.id);
+      if (isNaN(teamId)) {
+        return res.status(400).json({ error: "Invalid team ID" });
+      }
+
+      // Check if user has access to this team
+      const teamMembership = await storage.getTeamMembership(req.user!.id, teamId);
+      const team = await storage.getTeam(teamId);
+      
+      if (!teamMembership && team?.ownerId !== req.user!.id) {
+        return res.status(403).json({ error: "Access denied to this team" });
+      }
+
+      const members = await storage.getTeamMembers(teamId);
+      res.json(members);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch team members" });
+    }
+  });
+
+  app.post("/api/teams/:id/invite", requireAuth, async (req, res) => {
+    try {
+      const teamId = parseInt(req.params.id);
+      if (isNaN(teamId)) {
+        return res.status(400).json({ error: "Invalid team ID" });
+      }
+
+      // Check if user can invite members (must be team owner or admin)
+      const team = await storage.getTeam(teamId);
+      if (!team) {
+        return res.status(404).json({ error: "Team not found" });
+      }
+
+      const membership = await storage.getTeamMembership(req.user!.id, teamId);
+      const canInvite = team.ownerId === req.user!.id || 
+                       (membership && membership.role === 'admin');
+      
+      if (!canInvite) {
+        return res.status(403).json({ 
+          error: "Access denied. Only team owners and admins can invite members" 
+        });
+      }
+
+      const { userId, role = "member" } = req.body;
+      if (!userId) {
+        return res.status(400).json({ error: "User ID is required" });
+      }
+
+      // Validate role
+      const validRoles = ["admin", "member", "viewer"];
+      if (!validRoles.includes(role)) {
+        return res.status(400).json({ 
+          error: "Invalid role. Must be one of: " + validRoles.join(", ") 
+        });
+      }
+
+      // Check if user is already a member
+      const existingMembership = await storage.getTeamMembership(userId, teamId);
+      if (existingMembership) {
+        return res.status(400).json({ error: "User is already a team member" });
+      }
+
+      const teamMember = await storage.addTeamMember(teamId, userId, role);
+      res.status(201).json(teamMember);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to invite team member" });
+    }
+  });
+
+  // User role management endpoints
+  app.put("/api/users/:id/role", requireAuth, async (req, res) => {
+    try {
+      const targetUserId = req.params.id;
+      const { role, projectId } = req.body;
+
+      // Validate role
+      const validRoles = ["admin", "member", "viewer"];
+      if (!role || !validRoles.includes(role)) {
+        return res.status(400).json({
+          error: "Invalid role. Must be one of: " + validRoles.join(", "),
+        });
+      }
+
+      // Check if user can manage the target user
+      const userRoles = await storage.getUserRoles(req.user!.id);
+      const isAdmin = userRoles.some(r => r.role === 'admin');
+      const isSelf = targetUserId === req.user!.id;
+
+      if (!isAdmin && !isSelf) {
+        return res.status(403).json({ 
+          error: "Access denied. Only admins can modify other users' roles" 
+        });
+      }
+
+      // If projectId is specified, verify user has access to that project
+      if (projectId) {
+        const hasProjectAccess = await storage.verifyProjectAccess(req.user!.id, projectId);
+        if (!hasProjectAccess) {
+          return res.status(403).json({ error: "Access denied to this project" });
+        }
+      }
+
+      // Remove existing roles for this user/project combination
+      const existingRoles = projectId 
+        ? await storage.getUserRolesForProject(targetUserId, projectId)
+        : await storage.getUserRoles(targetUserId).then(roles => roles.filter(r => !r.projectId));
+
+      for (const existingRole of existingRoles) {
+        await storage.removeUserRole(targetUserId, existingRole.role, existingRole.projectId || undefined);
+      }
+
+      // Assign new role
+      await storage.assignUserRole(targetUserId, role, projectId);
+
+      res.json({ success: true, message: "User role updated successfully" });
+    } catch (error) {
+      console.error("Role update error:", error);
+      res.status(500).json({ error: "Failed to update user role" });
+    }
+  });
+
+  app.get("/api/users/me/permissions", requireAuth, async (req, res) => {
+    try {
+      const allRoles = await storage.getUserRoles(req.user!.id);
+      const userTeams = await storage.getUserTeams(req.user!.id);
+      
+      // Separate global and project-specific roles
+      const globalRoles = allRoles
+        .filter(role => !role.projectId)
+        .map(role => role.role);
+      
+      const projectRoles: { [projectId: string]: string[] } = {};
+      allRoles
+        .filter(role => role.projectId)
+        .forEach(role => {
+          if (!projectRoles[role.projectId!]) {
+            projectRoles[role.projectId!] = [];
+          }
+          projectRoles[role.projectId!].push(role.role);
+        });
+
+      // Get team memberships
+      const teamMemberships = [];
+      for (const team of userTeams) {
+        const membership = await storage.getTeamMembership(req.user!.id, team.id);
+        if (membership) {
+          teamMemberships.push({
+            teamId: team.id,
+            teamName: team.name,
+            role: membership.role,
+          });
+        }
+      }
+
+      res.json({
+        userId: req.user!.id,
+        globalRoles,
+        projectRoles,
+        teamMemberships,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch user permissions" });
     }
   });
 
