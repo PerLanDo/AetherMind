@@ -1,16 +1,26 @@
 import { useState } from "react";
-import { 
-  MessageSquare, 
-  CheckCircle2, 
-  RotateCcw, 
-  FileText, 
-  Lightbulb, 
+import {
+  MessageSquare,
+  CheckCircle2,
+  RotateCcw,
+  FileText,
+  Lightbulb,
   BookOpen,
-  BarChart3
+  BarChart3,
+  PenTool,
+  Volume2,
+  Eye,
+  Shield,
+  Layout,
+  Hash,
+  GraduationCap,
+  Feather,
+  Settings,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import WritingAssistant from "@/components/WritingAssistant";
 
 interface AITool {
   id: string;
@@ -23,6 +33,30 @@ interface AITool {
 
 export default function AIToolsPanel() {
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
+  const [showWritingAssistant, setShowWritingAssistant] = useState(false);
+
+  const writingTools = [
+    "grammar",
+    "writing_improvement",
+    "tone_adjustment",
+    "readability_check",
+    "plagiarism_check",
+    "structure_analysis",
+    "keyword_extraction",
+    "academic_style",
+    "creative_writing",
+    "technical_writing",
+    "paraphrase",
+  ];
+
+  const handleToolActivation = (toolId: string) => {
+    setSelectedTool(toolId);
+    if (writingTools.includes(toolId)) {
+      setShowWritingAssistant(true);
+    } else {
+      console.log(`${toolId} activated`);
+    }
+  };
 
   const aiTools: AITool[] = [
     {
@@ -31,21 +65,40 @@ export default function AIToolsPanel() {
       description: "Ask questions about your uploaded research files",
       icon: MessageSquare,
       status: "available",
-      action: () => {
-        setSelectedTool("qa");
-        console.log('AI Q&A activated');
-      }
+      action: () => handleToolActivation("qa"),
     },
     {
       id: "grammar",
-      title: "Grammar & Style Checks",
-      description: "Improve your academic writing quality",
+      title: "Grammar & Spelling",
+      description: "Check grammar, punctuation, and spelling errors",
       icon: CheckCircle2,
       status: "available",
-      action: () => {
-        setSelectedTool("grammar");
-        console.log('Grammar check activated');
-      }
+      action: () => handleToolActivation("grammar"),
+    },
+    {
+      id: "writing_improvement",
+      title: "Writing Enhancement",
+      description: "Improve clarity, flow, and overall writing quality",
+      icon: PenTool,
+      status: "new",
+      action: () => handleToolActivation("writing_improvement"),
+    },
+    {
+      id: "tone_adjustment",
+      title: "Tone & Style Adjustment",
+      description:
+        "Adjust tone for academic, professional, or creative writing",
+      icon: Volume2,
+      status: "new",
+      action: () => handleToolActivation("tone_adjustment"),
+    },
+    {
+      id: "readability_check",
+      title: "Readability Analysis",
+      description: "Analyze text complexity and improve accessibility",
+      icon: Eye,
+      status: "new",
+      action: () => handleToolActivation("readability_check"),
     },
     {
       id: "paraphrase",
@@ -53,21 +106,63 @@ export default function AIToolsPanel() {
       description: "Rephrase text and create summaries",
       icon: RotateCcw,
       status: "available",
-      action: () => {
-        setSelectedTool("paraphrase");
-        console.log('Paraphrase tool activated');
-      }
+      action: () => handleToolActivation("paraphrase"),
+    },
+    {
+      id: "plagiarism_check",
+      title: "Originality Check",
+      description: "Check for potential plagiarism and improve originality",
+      icon: Shield,
+      status: "new",
+      action: () => handleToolActivation("plagiarism_check"),
+    },
+    {
+      id: "structure_analysis",
+      title: "Structure Analysis",
+      description: "Analyze document organization and logical flow",
+      icon: Layout,
+      status: "new",
+      action: () => handleToolActivation("structure_analysis"),
+    },
+    {
+      id: "keyword_extraction",
+      title: "Keyword Extraction",
+      description: "Extract key terms and important concepts",
+      icon: Hash,
+      status: "new",
+      action: () => handleToolActivation("keyword_extraction"),
+    },
+    {
+      id: "academic_style",
+      title: "Academic Style Guide",
+      description: "Transform text to proper academic conventions",
+      icon: GraduationCap,
+      status: "new",
+      action: () => handleToolActivation("academic_style"),
+    },
+    {
+      id: "creative_writing",
+      title: "Creative Writing Helper",
+      description: "Enhance narrative flow and creative expression",
+      icon: Feather,
+      status: "new",
+      action: () => handleToolActivation("creative_writing"),
+    },
+    {
+      id: "technical_writing",
+      title: "Technical Writing",
+      description: "Improve clarity and precision of technical content",
+      icon: Settings,
+      status: "new",
+      action: () => handleToolActivation("technical_writing"),
     },
     {
       id: "citation",
-      title: "Auto Citation Generator (APA)",
-      description: "Generate proper academic citations",
+      title: "Citation Generator",
+      description: "Generate proper academic citations (APA, MLA, Chicago)",
       icon: FileText,
-      status: "new",
-      action: () => {
-        setSelectedTool("citation");
-        console.log('Citation generator activated');
-      }
+      status: "available",
+      action: () => handleToolActivation("citation"),
     },
     {
       id: "literature",
@@ -75,10 +170,7 @@ export default function AIToolsPanel() {
       description: "Discover relevant research papers",
       icon: Lightbulb,
       status: "available",
-      action: () => {
-        setSelectedTool("literature");
-        console.log('Literature suggestions activated');
-      }
+      action: () => handleToolActivation("literature"),
     },
     {
       id: "outline",
@@ -86,10 +178,7 @@ export default function AIToolsPanel() {
       description: "Structure your thesis or essays",
       icon: BookOpen,
       status: "coming-soon",
-      action: () => {
-        setSelectedTool("outline");
-        console.log('Outline builder activated');
-      }
+      action: () => handleToolActivation("outline"),
     },
     {
       id: "analysis",
@@ -97,70 +186,93 @@ export default function AIToolsPanel() {
       description: "Basic statistics and coding assistance",
       icon: BarChart3,
       status: "coming-soon",
-      action: () => {
-        setSelectedTool("analysis");
-        console.log('Data analysis activated');
-      }
-    }
+      action: () => handleToolActivation("analysis"),
+    },
   ];
 
   const getStatusBadge = (status?: string) => {
     switch (status) {
       case "new":
-        return <Badge className="bg-green-500/10 text-green-400 border-green-500/20">New</Badge>;
+        return (
+          <Badge className="bg-green-500/10 text-green-400 border-green-500/20">
+            New
+          </Badge>
+        );
       case "coming-soon":
-        return <Badge variant="outline" className="text-muted-foreground">Coming Soon</Badge>;
+        return (
+          <Badge variant="outline" className="text-muted-foreground">
+            Coming Soon
+          </Badge>
+        );
       default:
         return null;
     }
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {aiTools.map((tool) => {
-        const IconComponent = tool.icon;
-        const isSelected = selectedTool === tool.id;
-        const isDisabled = tool.status === "coming-soon";
-        
-        return (
-          <Card 
-            key={tool.id}
-            className={`cursor-pointer transition-all hover-elevate ${
-              isSelected ? 'ring-2 ring-primary bg-primary/5' : ''
-            } ${isDisabled ? 'opacity-60 cursor-not-allowed' : ''}`}
-            onClick={!isDisabled ? tool.action : undefined}
-            data-testid={`card-ai-tool-${tool.id}`}
-          >
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-primary/10 rounded-lg">
-                    <IconComponent className="h-5 w-5 text-primary" />
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {aiTools.map((tool) => {
+          const IconComponent = tool.icon;
+          const isSelected = selectedTool === tool.id;
+          const isDisabled = tool.status === "coming-soon";
+
+          return (
+            <Card
+              key={tool.id}
+              className={`cursor-pointer transition-all hover-elevate ${
+                isSelected ? "ring-2 ring-primary bg-primary/5" : ""
+              } ${isDisabled ? "opacity-60 cursor-not-allowed" : ""}`}
+              onClick={!isDisabled ? tool.action : undefined}
+              data-testid={`card-ai-tool-${tool.id}`}
+            >
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary/10 rounded-lg">
+                      <IconComponent className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-sm font-medium">
+                        {tool.title}
+                      </CardTitle>
+                    </div>
                   </div>
-                  <div>
-                    <CardTitle className="text-sm font-medium">{tool.title}</CardTitle>
-                  </div>
+                  {getStatusBadge(tool.status)}
                 </div>
-                {getStatusBadge(tool.status)}
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <p className="text-sm text-muted-foreground mb-3">
-                {tool.description}
-              </p>
-              <Button 
-                size="sm" 
-                variant={isSelected ? "default" : "outline"} 
-                className="w-full"
-                disabled={isDisabled}
-                data-testid={`button-activate-${tool.id}`}
-              >
-                {isSelected ? "Active" : isDisabled ? "Coming Soon" : "Activate"}
-              </Button>
-            </CardContent>
-          </Card>
-        );
-      })}
-    </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <p className="text-sm text-muted-foreground mb-3">
+                  {tool.description}
+                </p>
+                <Button
+                  size="sm"
+                  variant={isSelected ? "default" : "outline"}
+                  className="w-full"
+                  disabled={isDisabled}
+                  data-testid={`button-activate-${tool.id}`}
+                >
+                  {isSelected
+                    ? "Active"
+                    : isDisabled
+                    ? "Coming Soon"
+                    : "Activate"}
+                </Button>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {showWritingAssistant && selectedTool && (
+        <WritingAssistant
+          selectedTool={selectedTool}
+          onClose={() => {
+            setShowWritingAssistant(false);
+            setSelectedTool(null);
+          }}
+        />
+      )}
+    </>
   );
 }

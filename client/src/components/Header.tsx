@@ -1,4 +1,4 @@
-import { Bell, Search, Settings, User } from "lucide-react";
+import { Bell, Search, Settings, User, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -10,20 +10,45 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/components/AuthProvider";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Header() {
+  const { user, logout } = useAuth();
+  const { toast } = useToast();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast({
+        title: "Logged out",
+        description: "You have been successfully logged out.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to log out. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const getUserInitials = () => {
+    if (!user?.username) return "U";
+    return user.username.charAt(0).toUpperCase();
+  };
   return (
     <header className="h-14 border-b border-border bg-background flex items-center justify-between px-6">
       {/* Logo and Brand */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">O</span>
+            <span className="text-primary-foreground font-bold text-sm">A</span>
           </div>
-          <span className="font-semibold text-xl">OMNISCI AI</span>
+          <span className="font-semibold text-xl">AetherMind</span>
         </div>
         <Badge variant="outline" className="text-xs">
-          RESEARCH ASSISTANT
+          AI RESEARCH ASSISTANT
         </Badge>
       </div>
 
@@ -42,17 +67,24 @@ export default function Header() {
         <Button size="icon" variant="ghost" data-testid="button-notifications">
           <Bell className="h-4 w-4" />
         </Button>
-        
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="icon" variant="ghost" data-testid="button-user-menu">
               <Avatar className="h-8 w-8">
                 <AvatarImage src="/placeholder-avatar.jpg" />
-                <AvatarFallback>JD</AvatarFallback>
+                <AvatarFallback>{getUserInitials()}</AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
+            <div className="px-2 py-1.5">
+              <p className="text-sm font-medium">{user?.username}</p>
+              {user?.email && (
+                <p className="text-xs text-muted-foreground">{user.email}</p>
+              )}
+            </div>
+            <DropdownMenuSeparator />
             <DropdownMenuItem data-testid="menu-profile">
               <User className="mr-2 h-4 w-4" />
               Profile
@@ -62,7 +94,8 @@ export default function Header() {
               Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem data-testid="menu-logout">
+            <DropdownMenuItem onClick={handleLogout} data-testid="menu-logout">
+              <LogOut className="mr-2 h-4 w-4" />
               Log out
             </DropdownMenuItem>
           </DropdownMenuContent>
