@@ -102,6 +102,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete project route
+  app.delete("/api/projects/:projectId", requireAuth, async (req, res) => {
+    try {
+      await storage.deleteProject(req.params.projectId, req.user!.id);
+      res.json({ message: "Project deleted successfully" });
+    } catch (error) {
+      console.error("Delete project error:", error);
+      if (error instanceof Error && error.message.includes("not found")) {
+        res.status(404).json({ error: error.message });
+      } else if (error instanceof Error && error.message.includes("permission")) {
+        res.status(403).json({ error: error.message });
+      } else {
+        res.status(500).json({ error: "Failed to delete project" });
+      }
+    }
+  });
+
   // Enhanced project routes with role-based access
   app.get("/api/projects/with-roles", requireAuth, async (req, res) => {
     try {
@@ -1535,13 +1552,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        // Upload to Backblaze B2
-        const uploadResult = await StorageService.uploadFile(
-          file.buffer,
-          file.originalname,
-          file.mimetype,
-          req.user!.id
-        );
+        let uploadResult: {
+          cloudKey: string | null;
+          size: number;
+          url?: string;
+        } | null = null;
+
+        if (StorageService.isConfigured()) {
+          try {
+            const result = await StorageService.uploadFile(
+              file.buffer,
+              file.originalname,
+              file.mimetype,
+              req.user!.id
+            );
+            uploadResult = {
+              cloudKey: result.cloudKey,
+              size: result.size,
+              url: result.url,
+            };
+          } catch (storageError) {
+            console.error(
+              "Cloud storage upload failed, falling back to database storage:",
+              storageError
+            );
+          }
+        }
 
         // Extract text content for AI analysis
         const content = await aiService.extractTextContent(
@@ -1550,6 +1586,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           file.buffer
         );
 
+        const metadata: Record<string, any> = {
+          originalSize: file.size,
+          uploadedAt: new Date().toISOString(),
+        };
+
+        if (uploadResult?.url) {
+          metadata.cloudUrl = uploadResult.url;
+        } else {
+          metadata.fallbackFile = {
+            data: file.buffer.toString("base64"),
+            mimeType: file.mimetype,
+            originalName: file.originalname,
+          };
+        }
+
         // Save file metadata to database
         const [newFile] = await db
           .insert(files)
@@ -1557,15 +1608,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             name: file.originalname,
             originalName: file.originalname,
             mimeType: file.mimetype,
-            size: uploadResult.size,
-            cloudKey: uploadResult.cloudKey,
+            size: uploadResult?.size ?? file.size,
+            cloudKey: uploadResult?.cloudKey ?? null,
             projectId: projectId,
             uploadedBy: req.user!.id,
             content: content,
-            metadata: {
-              originalSize: file.size,
-              uploadedAt: new Date().toISOString(),
-            },
+            metadata,
           })
           .returning();
 
@@ -1598,7 +1646,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!file.cloudKey) {
-        // Fallback for files without cloudKey (old files)
+        const metadata = file.metadata as Record<string, any> | null;
+        const fallbackFile = metadata?.fallbackFile;
+
+        if (fallbackFile?.data) {
+          return res.json({
+            isFallback: true,
+            fileName: fallbackFile.originalName || file.name,
+            mimeType: fallbackFile.mimeType || file.mimeType,
+            data: fallbackFile.data,
+          });
+        }
+
+        // Fallback for legacy files without stored binary data
         return res.json({ content: file.content, isLegacy: true });
       }
 
@@ -1682,32 +1742,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Upload updated content to cloud
-      const buffer = Buffer.from(content, "utf-8");
-      const uploadResult = await StorageService.uploadFile(
-        buffer,
-        existingFile.name,
-        existingFile.mimeType || "text/plain",
-        req.user!.id
-      );
+      let updatedCloudKey = existingFile.cloudKey;
+      let updatedSize = existingFile.size;
 
-      // Delete old version if it exists
-      if (existingFile.cloudKey) {
+      if (StorageService.isConfigured()) {
         try {
-          await StorageService.deleteFile(existingFile.cloudKey);
-        } catch (error) {
-          console.warn("Failed to delete old version:", error);
+          // Upload updated content to cloud
+          const buffer = Buffer.from(content, "utf-8");
+          const uploadResult = await StorageService.uploadFile(
+            buffer,
+            existingFile.name,
+            existingFile.mimeType || "text/plain",
+            req.user!.id
+          );
+
+          // Delete old version if it exists
+          if (existingFile.cloudKey && existingFile.cloudKey !== uploadResult.cloudKey) {
+            try {
+              await StorageService.deleteFile(existingFile.cloudKey);
+            } catch (error) {
+              console.warn("Failed to delete old version:", error);
+            }
+          }
+
+          updatedCloudKey = uploadResult.cloudKey;
+          updatedSize = uploadResult.size;
+        } catch (cloudError) {
+          console.error(
+            "Cloud storage update failed, keeping previous version:",
+            cloudError
+          );
         }
       }
 
       // Update database record
+      const updateData: Record<string, any> = {
+        content,
+        updatedAt: new Date(),
+        size: updatedSize,
+      };
+
       const [updatedFile] = await db
         .update(files)
         .set({
-          content: content,
-          updatedAt: new Date(),
-          cloudKey: uploadResult.cloudKey,
-          size: uploadResult.size,
+          ...updateData,
+          cloudKey: updatedCloudKey ?? null,
         })
         .where(eq(files.id, id))
         .returning();

@@ -35,13 +35,15 @@ interface Project {
 interface ProjectDashboardProps {
   project: Project;
   onBack: () => void;
+  initialTab?: string;
 }
 
 export default function ProjectDashboard({
   project,
   onBack,
+  initialTab = "overview",
 }: ProjectDashboardProps) {
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   return (
     <div className="space-y-6">
@@ -81,59 +83,95 @@ export default function ProjectDashboard({
         </div>
       </div>
 
-      {/* Quick Stats */}
+      {/* Interactive Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
+        <Card 
+          className="cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-105"
+          onClick={() => setActiveTab("files")}
+        >
           <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <FileText className="h-4 w-4 text-blue-600" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <FileText className="h-4 w-4 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Files</p>
+                  <p className="text-2xl font-bold">12</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium">Files</p>
-                <p className="text-2xl font-bold">12</p>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">2.4 MB</p>
+                <p className="text-xs text-green-600">+2 today</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card 
+          className="cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-105"
+          onClick={() => setActiveTab("tasks")}
+        >
           <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <CheckSquare className="h-4 w-4 text-green-600" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <CheckSquare className="h-4 w-4 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Tasks</p>
+                  <p className="text-2xl font-bold">8</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium">Tasks</p>
-                <p className="text-2xl font-bold">8</p>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">75% done</p>
+                <p className="text-xs text-green-600">6 completed</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card 
+          className="cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-105"
+          onClick={() => setActiveTab("chat")}
+        >
           <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <MessageSquare className="h-4 w-4 text-purple-600" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <MessageSquare className="h-4 w-4 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Conversations</p>
+                  <p className="text-2xl font-bold">3</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium">Conversations</p>
-                <p className="text-2xl font-bold">3</p>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">24 messages</p>
+                <p className="text-xs text-blue-600">Active now</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card 
+          className="cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-105"
+          onClick={() => setActiveTab("team")}
+        >
           <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <Users className="h-4 w-4 text-orange-600" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <Users className="h-4 w-4 text-orange-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Members</p>
+                  <p className="text-2xl font-bold">1</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium">Members</p>
-                <p className="text-2xl font-bold">1</p>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">Owner</p>
+                <p className="text-xs text-green-600">Online</p>
               </div>
             </div>
           </CardContent>
@@ -142,8 +180,9 @@ export default function ProjectDashboard({
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="files">Files</TabsTrigger>
           <TabsTrigger value="research">Research Assistant</TabsTrigger>
           <TabsTrigger value="tasks">Task Management</TabsTrigger>
           <TabsTrigger value="chat">Team Chat</TabsTrigger>
@@ -211,6 +250,29 @@ export default function ProjectDashboard({
                   <Button variant="outline" className="h-20 flex-col gap-2">
                     <Users className="h-6 w-6" />
                     <span className="text-sm">Invite Team</span>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="files" className="mt-6">
+          <div className="max-w-4xl mx-auto">
+            <Card>
+              <CardHeader>
+                <CardTitle>Project Files</CardTitle>
+                <p className="text-muted-foreground">
+                  Upload and manage research documents, papers, and resources
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">
+                    File management interface will be integrated here
+                  </p>
+                  <Button className="mt-4" onClick={() => window.location.href = '/files'}>
+                    Go to Files Page
                   </Button>
                 </div>
               </CardContent>

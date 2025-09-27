@@ -1,41 +1,126 @@
-import { useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Upload, FileText, Trash2, Download, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface UploadedFile {
   id: string;
   name: string;
-  size: string;
-  type: string;
+  size: number;
+  mimeType: string;
   uploadedAt: string;
 }
 
 interface FileUploadZoneProps {
   onUploadComplete?: () => void;
+  projectId?: string;
+}
+
+interface Project {
+  id: string;
+  name: string;
 }
 
 export default function FileUploadZone({
   onUploadComplete,
+  projectId,
 }: FileUploadZoneProps) {
-  const [files, setFiles] = useState<UploadedFile[]>([
-    {
-      id: "1",
-      name: "Climate_Research_Paper_v2.pdf",
-      size: "2.4 MB",
-      type: "PDF",
-      uploadedAt: "2 hours ago",
-    },
-    {
-      id: "2",
-      name: "Literature_Review_Notes.docx",
-      size: "1.8 MB",
-      type: "DOC",
-      uploadedAt: "1 day ago",
-    },
-  ]);
+  const decodeBase64 = useCallback((value: string) => {
+    if (typeof globalThis.atob === "function") {
+      return globalThis.atob(value);
+    }
+    if (typeof Buffer !== "undefined") {
+      return Buffer.from(value, "base64").toString("binary");
+    }
+    throw new Error("Base64 decoding is not supported in this environment");
+  }, []);
+
+  const queryClient = useQueryClient();
+  const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(projectId || "");
+
+  // Fetch projects if no projectId is provided
+  const { data: projects = [] } = useQuery<Project[]>({
+    queryKey: ["/api/projects"],
+    queryFn: async () => {
+      const response = await fetch("/api/projects", {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch projects");
+      }
+      return response.json();
+    },
+    enabled: !projectId, // Only fetch if no projectId is provided
+  });
+
+  const decodedProjects = useMemo(
+    () =>
+      projects.map((project) => ({
+        id: String(project.id),
+        name: project.name,
+      })),
+    [projects]
+  );
+
+  useEffect(() => {
+    if (!projectId && decodedProjects.length > 0 && !selectedProjectId) {
+      setSelectedProjectId(decodedProjects[0].id);
+    }
+  }, [projectId, decodedProjects, selectedProjectId]);
+
+  const loadProjectFiles = useCallback(
+    async (targetId: string) => {
+      setIsLoadingFiles(true);
+      try {
+        const response = await fetch(`/api/projects/${targetId}/files`, {
+          credentials: "include",
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch project files");
+        }
+
+        const data = await response.json();
+
+        const mapped = data.map((file: any) => ({
+          id: file.id,
+          name: file.originalName || file.name,
+          size: file.size,
+          mimeType: file.mimeType,
+          uploadedAt: file.createdAt,
+        }));
+        setFiles(mapped);
+      } catch (error) {
+        console.error("Failed to load files", error);
+        setFiles([]);
+      } finally {
+        setIsLoadingFiles(false);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    const target = projectId || selectedProjectId;
+    if (!target) {
+      setFiles([]);
+      return;
+    }
+    void loadProjectFiles(target);
+  }, [projectId, selectedProjectId, loadProjectFiles]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -47,26 +132,72 @@ export default function FileUploadZone({
     setIsDragOver(false);
   }, []);
 
+  const uploadFiles = async (filesToUpload: File[]) => {
+    const targetProjectId = projectId || selectedProjectId;
+    
+    if (!targetProjectId) {
+      console.error("No project selected for upload");
+      return;
+    }
+    
+    setIsUploading(true);
+    try {
+      await Promise.all(
+        filesToUpload.map(async (file) => {
+          const formData = new FormData();
+          formData.append("file", file);
+          formData.append("projectId", targetProjectId);
+
+          const response = await fetch("/api/files/upload", {
+            method: "POST",
+            body: formData,
+            credentials: "include",
+          });
+
+          const payload = await response.json().catch(() => null);
+
+          if (!response.ok || !payload) {
+            const message =
+              payload?.error || `Failed to upload ${file.name}`;
+            throw new Error(message);
+          }
+
+          const uploadedFile = payload;
+
+          setFiles((prev) => [
+            {
+              id: uploadedFile.id,
+              name:
+                uploadedFile.originalName || uploadedFile.name || file.name,
+              size: uploadedFile.size,
+              mimeType: uploadedFile.mimeType || file.type,
+              uploadedAt: uploadedFile.createdAt || new Date().toISOString(),
+            },
+            ...prev,
+          ]);
+        })
+      );
+      await loadProjectFiles(targetProjectId);
+      await queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) && query.queryKey[0] === "/api/files",
+      });
+    } catch (error) {
+      console.error("Upload error", error);
+    } finally {
+      setIsUploading(false);
+    }
+    if (onUploadComplete) {
+      onUploadComplete();
+    }
+  };
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
 
     const droppedFiles = Array.from(e.dataTransfer.files);
-    console.log(
-      "Files dropped:",
-      droppedFiles.map((f) => f.name)
-    );
-
-    // Mock file upload
-    const newFiles = droppedFiles.map((file, index) => ({
-      id: `${Date.now()}-${index}`,
-      name: file.name,
-      size: `${(file.size / 1024 / 1024).toFixed(1)} MB`,
-      type: file.name.split(".").pop()?.toUpperCase() || "FILE",
-      uploadedAt: "Just now",
-    }));
-
-    setFiles((prev) => [...newFiles, ...prev]);
+    uploadFiles(droppedFiles);
   }, []);
 
   const handleFileSelect = () => {
@@ -78,28 +209,37 @@ export default function FileUploadZone({
       const target = e.target as HTMLInputElement;
       if (target.files) {
         const selectedFiles = Array.from(target.files);
-        console.log(
-          "Files selected:",
-          selectedFiles.map((f) => f.name)
-        );
-
-        const newFiles = selectedFiles.map((file, index) => ({
-          id: `${Date.now()}-${index}`,
-          name: file.name,
-          size: `${(file.size / 1024 / 1024).toFixed(1)} MB`,
-          type: file.name.split(".").pop()?.toUpperCase() || "FILE",
-          uploadedAt: "Just now",
-        }));
-
-        setFiles((prev) => [...newFiles, ...prev]);
+        uploadFiles(selectedFiles);
       }
     };
     input.click();
   };
 
-  const handleDeleteFile = (fileId: string) => {
-    setFiles((prev) => prev.filter((f) => f.id !== fileId));
-    console.log("File deleted:", fileId);
+  const handleDeleteFile = async (fileId: string) => {
+    if (!fileId) return;
+    if (!confirm("Delete this file?")) return;
+    try {
+      const response = await fetch(`/api/files/${fileId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to delete file");
+      }
+
+      const target = projectId || selectedProjectId;
+      if (target) {
+        await loadProjectFiles(target);
+      }
+      await queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) && query.queryKey[0] === "/api/files",
+      });
+    } catch (error) {
+      console.error("Delete file error", error);
+    }
   };
 
   const handleViewFile = (fileId: string) => {
@@ -120,7 +260,25 @@ export default function FileUploadZone({
 
       const data = await response.json();
 
-      if (data.isLegacy) {
+      if (data.isFallback) {
+        const byteCharacters = decodeBase64(data.data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], {
+          type: data.mimeType || "application/octet-stream",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = data.fileName || `file-${fileId}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else if (data.isLegacy) {
         // Handle legacy files that don't use cloud storage
         const blob = new Blob([data.content], { type: "text/plain" });
         const url = URL.createObjectURL(blob);
@@ -149,6 +307,25 @@ export default function FileUploadZone({
 
   return (
     <div className="space-y-4">
+      {/* Project Selection (if no projectId provided) */}
+      {!projectId && (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Select Project</label>
+          <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Choose a project to upload files to" />
+            </SelectTrigger>
+            <SelectContent>
+              {decodedProjects.map((project) => (
+                <SelectItem key={project.id} value={project.id}>
+                  {project.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Upload Zone */}
       <Card
         className={`border-2 border-dashed transition-colors ${
@@ -174,9 +351,10 @@ export default function FileUploadZone({
           <Button
             onClick={handleFileSelect}
             variant="outline"
+            disabled={isUploading || (!projectId && !selectedProjectId)}
             data-testid="button-upload-files"
           >
-            Choose Files
+            {isUploading ? "Uploading..." : "Choose Files"}
           </Button>
           <p className="text-xs text-muted-foreground mt-2">
             Supports PDF, DOC, DOCX, TXT (Max 10MB each)
@@ -185,7 +363,11 @@ export default function FileUploadZone({
       </Card>
 
       {/* Uploaded Files List */}
-      {files.length > 0 && (
+      {isLoadingFiles ? (
+        <div className="text-center py-6 text-sm text-muted-foreground">
+          Loading files...
+        </div>
+      ) : files.length > 0 ? (
         <div className="space-y-2">
           <h4 className="font-medium text-sm">
             Uploaded Files ({files.length})
@@ -206,14 +388,14 @@ export default function FileUploadZone({
                       </p>
                       <div className="flex items-center gap-2 mt-1">
                         <Badge variant="secondary" className="text-xs">
-                          {file.type}
+                          {file.mimeType.split("/").pop()?.toUpperCase() || "FILE"}
                         </Badge>
                         <span className="text-xs text-muted-foreground">
-                          {file.size}
+                          {`${(file.size / 1024 / 1024).toFixed(1)} MB`}
                         </span>
                         <span className="text-xs text-muted-foreground">•</span>
                         <span className="text-xs text-muted-foreground">
-                          {file.uploadedAt}
+                          {new Date(file.uploadedAt).toLocaleString()}
                         </span>
                       </div>
                     </div>
@@ -253,7 +435,7 @@ export default function FileUploadZone({
             </Card>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

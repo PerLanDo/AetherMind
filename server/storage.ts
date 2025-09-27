@@ -36,6 +36,7 @@ import { eq, and, desc, or, ilike, sql } from "drizzle-orm";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
+import { StorageService } from "./storage-service";
 
 // Storage interface for OMNISCI AI - based on javascript_database integration
 export interface IStorage {
@@ -438,6 +439,7 @@ export class DatabaseStorage implements IStorage {
         uploadedBy: files.uploadedBy,
         content: files.content,
         metadata: files.metadata,
+        cloudKey: files.cloudKey,
       })
       .from(files)
       .innerJoin(projectMembers, eq(files.projectId, projectMembers.projectId))
@@ -601,6 +603,73 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0 ? result[0].projectId : null;
   }
 
+  // Delete a single project and all its associated data
+  async deleteProject(projectId: string, userId: string): Promise<void> {
+    // First verify that the user is the owner of the project
+    const project = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.ownerId, userId)))
+      .limit(1);
+
+    if (project.length === 0) {
+      throw new Error("Project not found or you don't have permission to delete it");
+    }
+
+    // Delete all associated data for this project
+    
+    // Get all conversations for this project
+    const projectConversations = await db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.projectId, projectId));
+
+    // Delete messages for each conversation
+    for (const conversation of projectConversations) {
+      await db
+        .delete(messages)
+        .where(eq(messages.conversationId, conversation.id));
+    }
+
+    // Delete conversations
+    await db
+      .delete(conversations)
+      .where(eq(conversations.projectId, projectId));
+
+    // Delete tasks
+    await db.delete(tasks).where(eq(tasks.projectId, projectId));
+
+    // Get all files for this project to delete from cloud storage
+    const projectFiles = await db
+      .select({ cloudKey: files.cloudKey })
+      .from(files)
+      .where(eq(files.projectId, projectId));
+
+    // Delete files from cloud storage
+    for (const file of projectFiles) {
+      if (file.cloudKey) {
+        try {
+          await StorageService.deleteFile(file.cloudKey);
+        } catch (error) {
+          console.warn("Failed to delete file from cloud storage:", error);
+        }
+      }
+    }
+
+    // Delete files from database
+    await db.delete(files).where(eq(files.projectId, projectId));
+
+    // Delete project members
+    await db
+      .delete(projectMembers)
+      .where(eq(projectMembers.projectId, projectId));
+
+    // Delete the project itself
+    await db.delete(projects).where(eq(projects.id, projectId));
+
+    console.log(`Deleted project: ${projectId}`);
+  }
+
   // Data management method to clear all user data
   async clearAllUserData(userId: string): Promise<void> {
     // Get all user's projects (where they are the owner)
@@ -611,37 +680,7 @@ export class DatabaseStorage implements IStorage {
 
     // For each project, delete all associated data
     for (const project of userProjects) {
-      // Get all conversations for this project
-      const projectConversations = await db
-        .select({ id: conversations.id })
-        .from(conversations)
-        .where(eq(conversations.projectId, project.id));
-
-      // Delete messages for each conversation
-      for (const conversation of projectConversations) {
-        await db
-          .delete(messages)
-          .where(eq(messages.conversationId, conversation.id));
-      }
-
-      // Delete conversations
-      await db
-        .delete(conversations)
-        .where(eq(conversations.projectId, project.id));
-
-      // Delete tasks
-      await db.delete(tasks).where(eq(tasks.projectId, project.id));
-
-      // Delete files
-      await db.delete(files).where(eq(files.projectId, project.id));
-
-      // Delete project members
-      await db
-        .delete(projectMembers)
-        .where(eq(projectMembers.projectId, project.id));
-
-      // Delete the project itself
-      await db.delete(projects).where(eq(projects.id, project.id));
+      await this.deleteProject(project.id, userId);
     }
 
     console.log(`Cleared all data for user: ${userId}`);

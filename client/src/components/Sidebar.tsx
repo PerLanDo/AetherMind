@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 interface Project {
-  id: number;
+  id: string;
   name: string;
   description?: string;
   created_at: string;
@@ -37,7 +37,7 @@ interface Project {
 
 export default function Sidebar() {
   const [location] = useLocation();
-  const [selectedProject, setSelectedProject] = useState<number | null>(null);
+  const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
 
   const handleClearData = async () => {
@@ -51,7 +51,7 @@ export default function Sidebar() {
 
     setIsClearing(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("authToken");
       const response = await fetch("/api/user/data", {
         method: "DELETE",
         headers: {
@@ -89,16 +89,26 @@ export default function Sidebar() {
       if (!response.ok) {
         throw new Error("Failed to fetch projects");
       }
-      return response.json();
+      const result = await response.json();
+      return result.map((project: Project & { id: string | number }) => ({
+        ...project,
+        id: String(project.id),
+      }));
     },
   });
 
   const navigationItems = [
     {
       path: "/",
+      label: "Files",
+      icon: FileText,
+      isActive: location === "/" || location === "/files",
+    },
+    {
+      path: "/projects",
       label: "Projects",
       icon: Home,
-      isActive: location === "/",
+      isActive: location === "/projects",
     },
     {
       path: "/dashboard",
@@ -111,12 +121,6 @@ export default function Sidebar() {
       label: "Tasks",
       icon: CheckSquare,
       isActive: location?.startsWith("/tasks"),
-    },
-    {
-      path: "/files",
-      label: "Files",
-      icon: FileText,
-      isActive: location?.startsWith("/files"),
     },
     {
       path: "/ai-tools",
@@ -132,10 +136,10 @@ export default function Sidebar() {
     },
   ];
 
-  const handleProjectSelect = (projectId: number) => {
+  const handleProjectSelect = (projectId: string) => {
     setSelectedProject(projectId);
-    // Navigate to project-specific page
-    window.location.href = `/project/${projectId}`;
+    // Navigate to projects page with the selected project
+    window.location.href = `/projects?project=${projectId}`;
   };
 
   return (
@@ -174,7 +178,7 @@ export default function Sidebar() {
           <h2 className="font-semibold text-sidebar-foreground">
             YOUR PROJECTS
           </h2>
-          <Link href="/?create=true">
+          <Link href="/projects?create=true">
             <Button size="icon" variant="ghost" className="h-6 w-6">
               <Plus className="h-4 w-4" />
             </Button>
@@ -192,7 +196,7 @@ export default function Sidebar() {
           <div className="text-center py-8 space-y-2">
             <FolderOpen className="h-8 w-8 mx-auto text-muted-foreground" />
             <div className="text-sm text-muted-foreground">No projects yet</div>
-            <Link href="/?create=true">
+            <Link href="/projects?create=true">
               <Button size="sm" variant="outline">
                 <Plus className="h-4 w-4 mr-2" />
                 Create Project

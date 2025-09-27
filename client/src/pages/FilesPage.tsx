@@ -39,7 +39,6 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import FileUploadZone from "@/components/FileUploadZone";
 import DocumentAnalyzer from "@/components/DocumentAnalyzer";
@@ -194,8 +193,7 @@ export default function FilesPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
-      <div className="flex h-[calc(100vh-4rem)]">
+      <div className="flex h-screen">
         <Sidebar />
         <main className="flex-1 flex flex-col">
           {/* Header */}
@@ -280,6 +278,7 @@ export default function FilesPage() {
                   </Button>
                 </div>
                 <FileUploadZone
+                  projectId={selectedProject?.toString()}
                   onUploadComplete={() => {
                     setShowUploader(false);
                     queryClient.invalidateQueries({ queryKey: ["/api/files"] });

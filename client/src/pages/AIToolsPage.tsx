@@ -1,12 +1,10 @@
-import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import AIToolsPanel from "@/components/AIToolsPanel";
 
 export default function AIToolsPage() {
   return (
     <div className="min-h-screen bg-background">
-      <Header />
-      <div className="flex h-[calc(100vh-4rem)]">
+      <div className="flex h-screen">
         <Sidebar />
         <main className="flex-1 p-6">
           <div className="max-w-4xl mx-auto">

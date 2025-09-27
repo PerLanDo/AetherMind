@@ -67,7 +67,7 @@ interface ToolCategory {
   isOpen: boolean;
 }
 
-export default function AIToolsPanel() {
+export default function AIToolsPanelRedesigned() {
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("tools");

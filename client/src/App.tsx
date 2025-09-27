@@ -38,7 +38,8 @@ function HomePage() {
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={ProjectsPage} />
+      <Route path="/" component={FilesPage} />
+      <Route path="/projects" component={ProjectsPage} />
       <Route path="/dashboard" component={HomePage} />
       <Route path="/files" component={FilesPage} />
       <Route path="/tasks" component={TasksPage} />

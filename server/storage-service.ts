@@ -1,30 +1,52 @@
-import { 
-  S3Client, 
-  PutObjectCommand, 
-  GetObjectCommand, 
-  DeleteObjectCommand, 
-  HeadObjectCommand, 
-  CopyObjectCommand, 
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+  HeadObjectCommand,
+  CopyObjectCommand,
   ListObjectsV2Command,
   GetObjectCommandOutput,
   HeadObjectCommandOutput,
-  _Object
+  _Object,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { v4 as uuidv4 } from "uuid";
 
-// Configure AWS SDK v3 for Backblaze B2
-const s3Client = new S3Client({
-  endpoint: process.env.B2_ENDPOINT || "https://s3.us-west-004.backblazeb2.com",
-  region: process.env.B2_REGION || "us-west-004",
-  credentials: {
-    accessKeyId: process.env.B2_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.B2_SECRET_ACCESS_KEY!,
-  },
-  forcePathStyle: true,
-});
-
+const B2_ENDPOINT =
+  process.env.B2_ENDPOINT || "https://s3.us-west-004.backblazeb2.com";
 const BUCKET_NAME = process.env.B2_BUCKET_NAME || "aethermind-storage";
+
+const hasB2Configuration = Boolean(
+  process.env.B2_ACCESS_KEY_ID && process.env.B2_SECRET_ACCESS_KEY
+);
+
+const s3Client = hasB2Configuration
+  ? new S3Client({
+      endpoint: B2_ENDPOINT,
+      region: process.env.B2_REGION || "us-west-004",
+      credentials: {
+        accessKeyId: process.env.B2_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.B2_SECRET_ACCESS_KEY!,
+      },
+      forcePathStyle: true,
+    })
+  : null;
+
+if (!hasB2Configuration) {
+  console.warn(
+    "[StorageService] Backblaze B2 credentials are not fully configured. File uploads will be stored in the database only."
+  );
+}
+
+function ensureClient(): S3Client {
+  if (!s3Client) {
+    const error = new Error("Cloud storage is not configured");
+    error.name = "CloudStorageNotConfiguredError";
+    throw error;
+  }
+  return s3Client;
+}
 
 export interface UploadResult {
   cloudKey: string;
@@ -38,6 +60,10 @@ export interface SignedUrlResult {
 }
 
 export class StorageService {
+  static isConfigured(): boolean {
+    return Boolean(s3Client);
+  }
+
   /**
    * Upload file to Backblaze B2
    */
@@ -47,6 +73,7 @@ export class StorageService {
     mimeType: string,
     userId: string
   ): Promise<UploadResult> {
+    const client = ensureClient();
     const fileExtension = originalName.split(".").pop() || "";
     const cloudKey = `files/${userId}/${uuidv4()}.${fileExtension}`;
 
@@ -63,10 +90,10 @@ export class StorageService {
         },
       });
 
-      await s3Client.send(uploadCommand);
+      await client.send(uploadCommand);
 
       // Construct the URL manually since v3 doesn't return Location
-      const url = `${process.env.B2_ENDPOINT || "https://s3.us-west-004.backblazeb2.com"}/${BUCKET_NAME}/${cloudKey}`;
+      const url = `${B2_ENDPOINT}/${BUCKET_NAME}/${cloudKey}`;
 
       return {
         cloudKey,
@@ -83,13 +110,14 @@ export class StorageService {
    * Download file from Backblaze B2
    */
   static async downloadFile(cloudKey: string): Promise<Buffer> {
+    const client = ensureClient();
     try {
       const command = new GetObjectCommand({
         Bucket: BUCKET_NAME,
         Key: cloudKey,
       });
 
-      const result = await s3Client.send(command);
+      const result = await client.send(command);
       
       // Convert the stream to buffer
       const chunks: Uint8Array[] = [];
@@ -113,13 +141,14 @@ export class StorageService {
     cloudKey: string,
     expiresIn: number = 3600
   ): Promise<SignedUrlResult> {
+    const client = ensureClient();
     try {
       const command = new GetObjectCommand({
         Bucket: BUCKET_NAME,
         Key: cloudKey,
       });
 
-      const url = await getSignedUrl(s3Client, command, { expiresIn });
+      const url = await getSignedUrl(client, command, { expiresIn });
 
       return {
         url,
@@ -135,6 +164,12 @@ export class StorageService {
    * Delete file from Backblaze B2
    */
   static async deleteFile(cloudKey: string): Promise<void> {
+    if (!s3Client) {
+      console.warn(
+        "[StorageService] Cloud storage not configured; skipping remote delete."
+      );
+      return;
+    }
     try {
       const command = new DeleteObjectCommand({
         Bucket: BUCKET_NAME,
@@ -152,6 +187,9 @@ export class StorageService {
    * Check if file exists in Backblaze B2
    */
   static async fileExists(cloudKey: string): Promise<boolean> {
+    if (!s3Client) {
+      return false;
+    }
     try {
       const command = new HeadObjectCommand({
         Bucket: BUCKET_NAME,
@@ -171,13 +209,14 @@ export class StorageService {
   static async getFileMetadata(
     cloudKey: string
   ): Promise<HeadObjectCommandOutput> {
+    const client = ensureClient();
     try {
       const command = new HeadObjectCommand({
         Bucket: BUCKET_NAME,
         Key: cloudKey,
       });
 
-      return await s3Client.send(command);
+      return await client.send(command);
     } catch (error) {
       console.error("Failed to get file metadata:", error);
       throw new Error("Failed to get file metadata");
@@ -191,6 +230,7 @@ export class StorageService {
     sourceKey: string,
     destinationKey: string
   ): Promise<void> {
+    const client = ensureClient();
     try {
       const command = new CopyObjectCommand({
         Bucket: BUCKET_NAME,
@@ -198,7 +238,7 @@ export class StorageService {
         Key: destinationKey,
       });
 
-      await s3Client.send(command);
+      await client.send(command);
     } catch (error) {
       console.error("Failed to copy file:", error);
       throw new Error("File copy failed");
@@ -212,6 +252,7 @@ export class StorageService {
     prefix: string,
     maxKeys: number = 1000
   ): Promise<_Object[]> {
+    const client = ensureClient();
     try {
       const command = new ListObjectsV2Command({
         Bucket: BUCKET_NAME,
@@ -219,7 +260,7 @@ export class StorageService {
         MaxKeys: maxKeys,
       });
 
-      const result = await s3Client.send(command);
+      const result = await client.send(command);
       return result.Contents || [];
     } catch (error) {
       console.error("Failed to list files:", error);

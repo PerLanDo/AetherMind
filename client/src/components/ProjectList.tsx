@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,12 +49,31 @@ interface Project {
 }
 
 interface ProjectListProps {
-  onSelectProject: (project: Project) => void;
+  onSelectProject: (project: Project, tab?: string) => void;
+  showCreateProject?: boolean;
+  onCloseCreateProject?: () => void;
 }
 
-export default function ProjectList({ onSelectProject }: ProjectListProps) {
-  const [showCreateProject, setShowCreateProject] = useState(false);
+export default function ProjectList({ 
+  onSelectProject, 
+  showCreateProject: externalShowCreate = false,
+  onCloseCreateProject 
+}: ProjectListProps) {
+  const [showCreateProject, setShowCreateProject] = useState(externalShowCreate);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+
+  // Sync external prop with internal state
+  useEffect(() => {
+    setShowCreateProject(externalShowCreate);
+  }, [externalShowCreate]);
+
+  // Handle closing create project modal
+  const handleCloseCreateProject = () => {
+    setShowCreateProject(false);
+    if (onCloseCreateProject) {
+      onCloseCreateProject();
+    }
+  };
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [projectToShare, setProjectToShare] = useState<Project | null>(null);
@@ -64,12 +83,13 @@ export default function ProjectList({ onSelectProject }: ProjectListProps) {
   // Delete project mutation
   const deleteProjectMutation = useMutation({
     mutationFn: async (projectId: string) => {
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("authToken");
       const response = await fetch(`/api/projects/${projectId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
       });
       if (!response.ok) {
         const error = await response.json();
@@ -107,9 +127,8 @@ export default function ProjectList({ onSelectProject }: ProjectListProps) {
   };
 
   const handleSettingsProject = (project: Project) => {
-    // Navigate to project dashboard with settings tab active
-    onSelectProject(project);
-    // Note: We'll need to modify ProjectDashboard to accept an initial tab parameter
+    // Navigate to project dashboard with team tab active (where settings are located)
+    onSelectProject(project, "team");
   };
 
   const confirmDelete = () => {
@@ -351,7 +370,7 @@ export default function ProjectList({ onSelectProject }: ProjectListProps) {
             <AlertDialogAction
               onClick={() => {
                 if (projectToShare) {
-                  onSelectProject(projectToShare);
+                  onSelectProject(projectToShare, "team");
                 }
                 setShowShareDialog(false);
                 setProjectToShare(null);
@@ -365,7 +384,7 @@ export default function ProjectList({ onSelectProject }: ProjectListProps) {
 
       {/* Create Project Modal */}
       {showCreateProject && (
-        <CreateProject onClose={() => setShowCreateProject(false)} />
+        <CreateProject onClose={handleCloseCreateProject} />
       )}
     </div>
   );

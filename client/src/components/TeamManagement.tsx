@@ -89,7 +89,7 @@ export function TeamManagement({ projectId, userRole }: TeamManagementProps) {
   const { data: members = [], isLoading } = useQuery({
     queryKey: ["projectMembers", projectId],
     queryFn: async (): Promise<ProjectMember[]> => {
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("authToken");
       const response = await fetch(`/api/projects/${projectId}/members`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -115,7 +115,7 @@ export function TeamManagement({ projectId, userRole }: TeamManagementProps) {
 
     setIsSearching(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("authToken");
       const response = await fetch(
         `/api/users/search?query=${encodeURIComponent(query)}`,
         {
@@ -142,7 +142,7 @@ export function TeamManagement({ projectId, userRole }: TeamManagementProps) {
   // Add member mutation
   const addMemberMutation = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("authToken");
       const response = await fetch(`/api/projects/${projectId}/members`, {
         method: "POST",
         headers: {
@@ -171,7 +171,7 @@ export function TeamManagement({ projectId, userRole }: TeamManagementProps) {
   // Update role mutation
   const updateRoleMutation = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("authToken");
       const response = await fetch(
         `/api/projects/${projectId}/members/${userId}/role`,
         {
@@ -199,7 +199,7 @@ export function TeamManagement({ projectId, userRole }: TeamManagementProps) {
   // Remove member mutation
   const removeMemberMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("authToken");
       const response = await fetch(
         `/api/projects/${projectId}/members/${userId}`,
         {
