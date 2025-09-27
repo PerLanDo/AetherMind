@@ -10,6 +10,7 @@
     "build:client": "vite build",
     "build:server": "esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "cross-env NODE_ENV=production node dist/index.js",
+    "vercel-build": "npm run build:client",
     "check": "tsc",
     "type-check": "tsc --noEmit",
     "test": "echo 'Tests will be added in Phase 2' && exit 0",
@@ -18,7 +19,7 @@
     "docker:build": "docker build -t aethermind .",
     "docker:run": "docker-compose up -d",
     "docker:stop": "docker-compose down",
-    "deploy": "./deploy.sh"
+    "deploy:vercel": "vercel --prod"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
