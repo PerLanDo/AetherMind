@@ -254,8 +254,23 @@ export default function Sidebar() {
                       >
                         Open
                       </DropdownMenuItem>
-                      <DropdownMenuItem>Share</DropdownMenuItem>
-                      <DropdownMenuItem>Settings</DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // TODO: Implement share functionality
+                          console.log("Share project:", project.id);
+                        }}
+                      >
+                        Share
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleProjectSelect(project.id);
+                        }}
+                      >
+                        Settings
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
