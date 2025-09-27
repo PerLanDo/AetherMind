@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider, useAuth } from "@/components/AuthProvider";
+import { useGlobalKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import AuthPage from "@/pages/AuthPage";
 import ProjectsPage from "@/pages/ProjectsPage";
 import FilesPage from "@/pages/FilesPage";
@@ -18,8 +19,6 @@ import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
 
 function HomePage() {
-  // TODO: Add breadcrumb navigation to help users understand their current location
-  // TODO: Implement keyboard shortcuts for common actions (Ctrl+N for new project, etc.)
   return (
     <div className="flex h-screen bg-background">
       <Sidebar />
@@ -49,9 +48,9 @@ function Router() {
 
 function AuthenticatedApp() {
   const { isAuthenticated, isLoading } = useAuth();
-
-  // TODO: Add error boundary to handle authentication errors gracefully
-  // TODO: Implement auto-logout after period of inactivity for security
+  
+  // Initialize global keyboard shortcuts
+  useGlobalKeyboardShortcuts();
   
   // Show loading spinner while checking authentication
   if (isLoading) {

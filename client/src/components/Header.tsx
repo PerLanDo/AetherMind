@@ -1,4 +1,4 @@
-import { Bell, Search, Settings, User, LogOut } from "lucide-react";
+import { Bell, Search, Settings, User, LogOut, Keyboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -9,9 +9,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/hooks/use-toast";
+import { BreadcrumbNavigation } from "@/components/BreadcrumbNavigation";
 
 export default function Header() {
   const { user, logout } = useAuth();
@@ -38,69 +44,94 @@ export default function Header() {
     return user.username.charAt(0).toUpperCase();
   };
   return (
-    <header className="h-14 border-b border-border bg-background flex items-center justify-between px-6">
-      {/* Logo and Brand */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">A</span>
-          </div>
-          <span className="font-semibold text-xl">AetherMind</span>
-        </div>
-        <Badge variant="outline" className="text-xs">
-          AI RESEARCH ASSISTANT
-        </Badge>
-      </div>
-
-      {/* Search */}
-      <div className="relative max-w-md flex-1 mx-8">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search projects, files, tasks..."
-          className="pl-10 bg-muted/50"
-          data-testid="input-search"
-        />
-      </div>
-
-      {/* User Controls */}
-      <div className="flex items-center gap-2">
-        <Button size="icon" variant="ghost" data-testid="button-notifications">
-          <Bell className="h-4 w-4" />
-        </Button>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="icon" variant="ghost" data-testid="button-user-menu">
-              <Avatar className="h-8 w-8">
-                <AvatarImage src="/placeholder-avatar.jpg" />
-                <AvatarFallback>{getUserInitials()}</AvatarFallback>
-              </Avatar>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <div className="px-2 py-1.5">
-              <p className="text-sm font-medium">{user?.username}</p>
-              {user?.email && (
-                <p className="text-xs text-muted-foreground">{user.email}</p>
-              )}
+    <div className="border-b border-border bg-background">
+      <header className="h-14 flex items-center justify-between px-6">
+        {/* Logo and Brand */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
+              <span className="text-primary-foreground font-bold text-sm">A</span>
             </div>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem data-testid="menu-profile">
-              <User className="mr-2 h-4 w-4" />
-              Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem data-testid="menu-settings">
-              <Settings className="mr-2 h-4 w-4" />
-              Settings
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout} data-testid="menu-logout">
-              <LogOut className="mr-2 h-4 w-4" />
-              Log out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            <span className="font-semibold text-xl">AetherMind</span>
+          </div>
+          <Badge variant="outline" className="text-xs">
+            AI RESEARCH ASSISTANT
+          </Badge>
+        </div>
+
+        {/* Search */}
+        <div className="relative max-w-md flex-1 mx-8">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search projects, files, tasks... (Ctrl+Shift+P)"
+            className="pl-10 pr-12 bg-muted/50"
+            data-testid="input-search"
+          />
+          <kbd className="absolute right-3 top-1/2 transform -translate-y-1/2 px-1.5 py-0.5 bg-muted text-muted-foreground rounded text-xs font-mono">
+            ⌃⇧P
+          </kbd>
+        </div>
+
+        {/* User Controls */}
+        <div className="flex items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="icon" variant="ghost">
+                <Keyboard className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-sm">
+              <div className="space-y-1">
+                <div><kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+N</kbd> New Project</div>
+                <div><kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+Shift+P</kbd> Search</div>
+                <div><kbd className="px-1 py-0.5 bg-muted rounded text-xs">Esc</kbd> Close/Clear</div>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+
+          <Button size="icon" variant="ghost" data-testid="button-notifications">
+            <Bell className="h-4 w-4" />
+          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="icon" variant="ghost" data-testid="button-user-menu">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src="/placeholder-avatar.jpg" />
+                  <AvatarFallback>{getUserInitials()}</AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <div className="px-2 py-1.5">
+                <p className="text-sm font-medium">{user?.username}</p>
+                {user?.email && (
+                  <p className="text-xs text-muted-foreground">{user.email}</p>
+                )}
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem data-testid="menu-profile">
+                <User className="mr-2 h-4 w-4" />
+                Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem data-testid="menu-settings">
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout} data-testid="menu-logout">
+                <LogOut className="mr-2 h-4 w-4" />
+                Log out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
+      
+      {/* Breadcrumb Navigation */}
+      <div className="px-6 py-2 bg-muted/30">
+        <BreadcrumbNavigation />
       </div>
-    </header>
+    </div>
   );
 }
