@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["server/**/*"],
+  "exclude": [],
+  "compilerOptions": {
+    "module": "CommonJS",
+    "types": ["jest", "node", "supertest"],
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true
+  }
+}
