@@ -358,6 +358,13 @@ export const insertTaskSchema = createInsertSchema(tasks).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  dueDate: z.union([z.date(), z.string()]).optional().transform((val) => {
+    if (typeof val === 'string') {
+      return new Date(val);
+    }
+    return val;
+  })
 });
 
 export const insertDocumentVersionSchema = createInsertSchema(
