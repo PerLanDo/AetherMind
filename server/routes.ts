@@ -87,6 +87,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test database query for files table
+  app.get("/api/test-files-db", requireAuth, async (req, res) => {
+    try {
+      // Simple query to check if files table exists
+      const result = await storage.getProjectFiles("ec1ff08c-4c35-410c-88c2-0d7c84bfb535");
+      res.json({ message: "Files table query successful", count: result.length });
+    } catch (error) {
+      console.error("Files table test error:", error);
+      res.status(500).json({ error: "Files table test failed", details: error.message });
+    }
+  });
+
+  // Simple files test endpoint
+  app.get("/api/files-test", async (req, res) => {
+    try {
+      res.json({ message: "Files test endpoint working", timestamp: new Date().toISOString() });
+    } catch (error) {
+      res.status(500).json({ error: "Files test failed" });
+    }
+  });
+
+  // Test files endpoint without permission check
+  app.get("/api/files-direct", requireAuth, async (req, res) => {
+    try {
+      console.log("Testing direct files query...");
+      const files = await storage.getProjectFiles("ec1ff08c-4c35-410c-88c2-0d7c84bfb535");
+      console.log("Files query successful, count:", files.length);
+      res.json({ files, count: files.length });
+    } catch (error) {
+      console.error("Direct files test error:", error);
+      res.status(500).json({ error: "Direct files test failed", details: error.message });
+    }
+  });
+
   // Project routes
   app.get("/api/projects", requireAuth, async (req, res) => {
     try {
