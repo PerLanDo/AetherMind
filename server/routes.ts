@@ -942,10 +942,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(201).json(task);
     } catch (error) {
+      console.error("Task creation error:", error);
       if (error instanceof Error && error.name === "ZodError") {
         return res
           .status(400)
-          .json({ error: "Invalid task data", details: (error as any).errors });
+          .json({ 
+            error: "Invalid task data", 
+            details: (error as any).errors,
+            receivedData: req.body 
+          });
+      }
+      if (error instanceof Error) {
+        return res.status(500).json({ error: "Failed to create task", details: error.message });
       }
       res.status(500).json({ error: "Failed to create task" });
     }

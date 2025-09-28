@@ -50,8 +50,9 @@ export class NotificationWebSocketClient {
   constructor() {
     // Determine WebSocket URL based on current location
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.host;
-    this.url = `${protocol}//${host}/ws/notifications`;
+    const host = window.location.host || 'localhost:5000';  // Fallback to localhost:5000
+    // Fix: server uses /notifications path, not /ws/notifications
+    this.url = `${protocol}//${host}/notifications`;
   }
 
   // Set authentication token

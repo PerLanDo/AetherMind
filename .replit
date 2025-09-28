@@ -14,6 +14,22 @@ run = ["npm", "run", "start"]
 localPort = 5000
 externalPort = 80
 
+[[ports]]
+localPort = 37631
+externalPort = 3000
+
+[[ports]]
+localPort = 42005
+externalPort = 3002
+
+[[ports]]
+localPort = 42123
+externalPort = 3001
+
+[[ports]]
+localPort = 46153
+externalPort = 3003
+
 [env]
 PORT = "5000"
 
@@ -40,3 +56,4 @@ waitForPort = 5000
 
 [agent]
 integrations = ["javascript_log_in_with_replit:1.0.0", "javascript_websocket:1.0.0", "javascript_auth_all_persistance:1.0.0", "javascript_database:1.0.0", "javascript_openai:1.0.0"]
+expertMode = true

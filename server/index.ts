@@ -1,44 +1,21 @@
-// Load environment variables FIRST before any other imports
-import path from "path";
-import fs from "fs";
+// Load environment variables securely
 import { config } from "dotenv";
 
-// Force load from .env file and override system env vars
-const envPath = path.resolve(process.cwd(), ".env");
-const envContent = fs.readFileSync(envPath, "utf-8");
-const envVars: Record<string, string> = {};
+// Load environment variables from .env file
+config();
 
-envContent.split("\n").forEach((line) => {
-  const [key, ...valueParts] = line.split("=");
-  if (key && valueParts.length > 0) {
-    envVars[key.trim()] = valueParts.join("=").trim();
-  }
-});
+// Validate required environment variables
+const requiredEnvVars = ['DATABASE_URL'];
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
-// Override process.env with .env file values (this overrides system env vars)
-Object.assign(process.env, envVars);
-
-// Additional fallback for DATABASE_URL
-if (!process.env.DATABASE_URL || process.env.DATABASE_URL === "file:./dev.db") {
-  process.env.DATABASE_URL =
-    "postgresql://neondb_owner:npg_ZaBACckG5ER4@ep-hidden-poetry-a1kompbw-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
+if (missingEnvVars.length > 0) {
+  console.error('Missing required environment variables:', missingEnvVars);
+  process.exit(1);
 }
 
-// Force set API key if not present
-if (!process.env.GROK_4_FAST_FREE_API_KEY) {
-  process.env.GROK_4_FAST_FREE_API_KEY =
-    "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";
-}
-
-console.log("Environment setup complete:");
-console.log(
-  "DATABASE_URL:",
-  process.env.DATABASE_URL?.substring(0, 50) + "..."
-);
-console.log(
-  "GROK_4_FAST_FREE_API_KEY present:",
-  !!process.env.GROK_4_FAST_FREE_API_KEY
-);
+console.log("Environment setup complete");
+console.log("DATABASE_URL:", process.env.DATABASE_URL ? "Present" : "Missing");
+console.log("GROK_4_FAST_FREE_API_KEY:", process.env.GROK_4_FAST_FREE_API_KEY ? "Present" : "Missing");
 
 // Now import other modules after environment is set up
 import express, { type Request, Response, NextFunction } from "express";
@@ -134,7 +111,7 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
-  server.listen(port, "localhost", () => {
+  server.listen(port, "0.0.0.0", () => {
     log(`serving on port ${port}`);
   });
 })();
