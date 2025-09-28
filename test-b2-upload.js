@@ -22,7 +22,7 @@ async function testUploadDownload() {
   try {
     // Create test file
     const testContent = `AetherMind B2 Integration Test\nTimestamp: ${new Date().toISOString()}`;
-    const testKey = `aethermind-test/test-${Date.now()}.txt`;
+    const testKey = `scholarsync-test/test-${Date.now()}.txt`;
 
     console.log("1️⃣ Uploading test file...");
     await s3

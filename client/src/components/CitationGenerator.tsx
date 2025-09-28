@@ -28,6 +28,7 @@ import {
   Globe,
   FileText,
   Edit,
+  X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -50,7 +51,11 @@ interface FormatGuideline {
   website: string;
 }
 
-export default function CitationGenerator() {
+interface CitationGeneratorProps {
+  onClose?: () => void;
+}
+
+export default function CitationGenerator({ onClose }: CitationGeneratorProps) {
   const [activeTab, setActiveTab] = useState("generate");
   const [source, setSource] = useState("");
   const [sourceType, setSourceType] = useState<
@@ -261,14 +266,21 @@ export default function CitationGenerator() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <BookOpen className="h-8 w-8 text-blue-600" />
-        <div>
-          <h1 className="text-3xl font-bold">Citation Generator</h1>
-          <p className="text-muted-foreground">
-            Generate citations in APA, MLA, Chicago, Harvard, and IEEE formats
-          </p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <BookOpen className="h-8 w-8 text-blue-600" />
+          <div>
+            <h1 className="text-3xl font-bold">Citation Generator</h1>
+            <p className="text-muted-foreground">
+              Generate citations in APA, MLA, Chicago, Harvard, and IEEE formats
+            </p>
+          </div>
         </div>
+        {onClose && (
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

@@ -16,7 +16,7 @@ app.use(helmet({
 // CORS configuration
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.VERCEL_URL, 'https://your-domain.com'].filter(Boolean)
+    ? [process.env.VERCEL_URL, 'https://your-domain.com'].filter((url): url is string => Boolean(url))
     : true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],

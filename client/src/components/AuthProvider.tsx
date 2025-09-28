@@ -50,7 +50,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isLoading,
     error,
   } = useQuery<User>({
-    queryKey: ["/api/user"],
+    queryKey: ["api", "user"],
     retry: false,
     refetchOnWindowFocus: false,
   });
@@ -84,7 +84,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     // Invalidate and refetch the user query instead of setting data directly
-    await queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+    await queryClient.invalidateQueries({ queryKey: ["api", "user"] });
   };
 
   const register = async (
@@ -108,7 +108,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     const userData = await response.json();
     // Invalidate and refetch the user query instead of setting data directly
-    await queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+    await queryClient.invalidateQueries({ queryKey: ["api", "user"] });
   };
 
   const logout = async () => {

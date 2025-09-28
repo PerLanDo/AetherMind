@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -44,28 +44,28 @@ import FileUploadZone from "@/components/FileUploadZone";
 import DocumentAnalyzer from "@/components/DocumentAnalyzer";
 
 interface FileItem {
-  id: number;
+  id: string;
   name: string;
   type: string;
   size: number;
-  project_id?: number;
+  project_id?: string;
   uploaded_at: string;
   url?: string;
 }
 
 interface Project {
-  id: number;
+  id: string;
   name: string;
 }
 
 export default function FilesPage() {
   const [location] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedProject, setSelectedProject] = useState<number | null>(null);
+  const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [showUploader, setShowUploader] = useState(false);
   const [analyzingFile, setAnalyzingFile] = useState<{
-    id: number;
+    id: string;
     name: string;
   } | null>(null);
 
@@ -77,26 +77,39 @@ export default function FilesPage() {
 
   // Fetch files
   const { data: files = [], isLoading: filesLoading } = useQuery({
-    queryKey: ["/api/files", selectedProject, searchQuery],
+    queryKey: ["api", "files", selectedProject, searchQuery],
     queryFn: async (): Promise<FileItem[]> => {
-      const params = new URLSearchParams();
-      if (selectedProject)
-        params.append("project_id", selectedProject.toString());
-      if (searchQuery) params.append("search", searchQuery);
-
-      const response = await fetch(`/api/files?${params}`, {
+      if (!selectedProject) return [];
+      
+      // Fetch files from the specific project
+      const response = await fetch(`/api/projects/${selectedProject}/files`, {
         credentials: "include",
       });
       if (!response.ok) {
         throw new Error("Failed to fetch files");
       }
-      return response.json();
+      const result = await response.json();
+      
+      // Transform the data to match FileItem interface
+      return result.map((file: any) => ({
+        id: file.id,
+        name: file.originalName || file.name,
+        type: file.mimeType,
+        size: file.size,
+        project_id: file.projectId,
+        uploaded_at: file.createdAt,
+      })).filter((file: FileItem) => {
+        // Apply search filter if provided
+        if (!searchQuery) return true;
+        return file.name.toLowerCase().includes(searchQuery.toLowerCase());
+      });
     },
+    enabled: !!selectedProject, // Only run query when a project is selected
   });
 
   // Fetch projects for filtering
   const { data: projects = [] } = useQuery({
-    queryKey: ["/api/projects"],
+    queryKey: ["api", "projects"],
     queryFn: async (): Promise<Project[]> => {
       const response = await fetch("/api/projects", {
         credentials: "include",
@@ -104,13 +117,17 @@ export default function FilesPage() {
       if (!response.ok) {
         throw new Error("Failed to fetch projects");
       }
-      return response.json();
+      const result = await response.json();
+      return result.map((project: any) => ({
+        ...project,
+        id: String(project.id),
+      }));
     },
   });
 
   // Delete file mutation
   const deleteMutation = useMutation({
-    mutationFn: async (fileId: number) => {
+    mutationFn: async (fileId: string) => {
       const response = await fetch(`/api/files/${fileId}`, {
         method: "DELETE",
         credentials: "include",
@@ -121,7 +138,9 @@ export default function FilesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/files"] });
+      queryClient.invalidateQueries({ 
+        queryKey: ["api", "files", selectedProject] 
+      });
     },
   });
 
@@ -140,13 +159,13 @@ export default function FilesPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
-  const handleFileDelete = (fileId: number) => {
+  const handleFileDelete = (fileId: string) => {
     if (confirm("Are you sure you want to delete this file?")) {
       deleteMutation.mutate(fileId);
     }
   };
 
-  const handleFileDownload = async (fileId: number) => {
+  const handleFileDownload = async (fileId: string) => {
     try {
       // Get signed download URL from backend
       const response = await fetch(`/api/files/${fileId}/download`, {
@@ -187,6 +206,13 @@ export default function FilesPage() {
     }
   };
 
+  // Auto-select first project if none selected
+  useEffect(() => {
+    if (projects.length > 0 && !selectedProject) {
+      setSelectedProject(projects[0].id);
+    }
+  }, [projects, selectedProject]);
+
   const handleFileAnalyze = (file: FileItem) => {
     setAnalyzingFile({ id: file.id, name: file.name });
   };
@@ -226,9 +252,9 @@ export default function FilesPage() {
               </div>
 
               <Select
-                value={selectedProject?.toString() || "all"}
+                value={selectedProject || "all"}
                 onValueChange={(value) =>
-                  setSelectedProject(value === "all" ? null : parseInt(value))
+                  setSelectedProject(value === "all" ? null : value)
                 }
               >
                 <SelectTrigger className="w-48">
@@ -237,7 +263,7 @@ export default function FilesPage() {
                 <SelectContent>
                   <SelectItem value="all">All Projects</SelectItem>
                   {projects.map((project) => (
-                    <SelectItem key={project.id} value={project.id.toString()}>
+                    <SelectItem key={project.id} value={project.id}>
                       {project.name}
                     </SelectItem>
                   ))}
@@ -278,10 +304,12 @@ export default function FilesPage() {
                   </Button>
                 </div>
                 <FileUploadZone
-                  projectId={selectedProject?.toString()}
+                  projectId={selectedProject || undefined}
                   onUploadComplete={() => {
                     setShowUploader(false);
-                    queryClient.invalidateQueries({ queryKey: ["/api/files"] });
+                    queryClient.invalidateQueries({ 
+                      queryKey: ["api", "files", selectedProject] 
+                    });
                   }}
                 />
               </div>

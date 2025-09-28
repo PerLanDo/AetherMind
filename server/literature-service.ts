@@ -47,7 +47,7 @@ export class LiteratureService {
 
       const response = await fetch(url, {
         headers: {
-          "User-Agent": "AetherMind/1.0 (mailto:research@aethermind.ai)",
+          "User-Agent": "ScholarSync/1.0 (mailto:research@aethermind.ai)",
         },
       });
 

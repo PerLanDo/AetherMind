@@ -31,11 +31,11 @@ RUN cd client && npm run build
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs
-RUN adduser -S aethermind -u 1001
+RUN adduser -S scholarsync -u 1001
 
 # Change ownership to non-root user
-RUN chown -R aethermind:nodejs /app
-USER aethermind
+RUN chown -R scholarsync:nodejs /app
+USER scholarsync
 
 # Expose port
 EXPOSE 5000

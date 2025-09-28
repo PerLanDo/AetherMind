@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# AetherMind Vercel Deployment Script
+# ScholarSync Vercel Deployment Script
 
-echo "🚀 Starting AetherMind Vercel Deployment..."
+echo "🚀 Starting ScholarSync Vercel Deployment..."
 
 # Check if Vercel CLI is installed
 if ! command -v vercel &> /dev/null; then

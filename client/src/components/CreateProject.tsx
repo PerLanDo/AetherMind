@@ -50,7 +50,7 @@ export default function CreateProject({
 
       if (response.ok) {
         const project = await response.json();
-        queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+        queryClient.invalidateQueries({ queryKey: ["api", "projects"] });
         toast({
           title: "Project created!",
           description: `Successfully created project "${project.name}"`,

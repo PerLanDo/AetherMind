@@ -8,7 +8,7 @@ const client = new OpenAI({
   apiKey: process.env.GROK_4_FAST_FREE_API_KEY,
   defaultHeaders: {
     "HTTP-Referer": "http://localhost:5000", // Optional, for openrouter
-    "X-Title": "AetherMind", // Optional, for openrouter
+    "X-Title": "ScholarSync", // Optional, for openrouter
   },
 });
 
@@ -246,7 +246,7 @@ Provide helpful, accurate, and academically appropriate responses. Be concise bu
         {
           headers: {
             "HTTP-Referer": "https://aethermind-ai.local",
-            "X-Title": "AetherMind Document Analysis",
+            "X-Title": "ScholarSync Document Analysis",
           },
         }
       );

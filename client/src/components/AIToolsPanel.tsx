@@ -41,7 +41,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import WritingAssistant from "@/components/WritingAssistant";
-import CitationGenerator from "@/components/CitationGenerator";
+import CitationGeneratorModal from "@/components/CitationGeneratorModal";
 import LiteratureSearch from "@/components/LiteratureSearch";
 import OutlineBuilder from "@/components/OutlineBuilder";
 import DataAnalysisHelper from "@/components/DataAnalysisHelper";
@@ -176,7 +176,7 @@ export default function AIToolsPanel() {
             icon: Hash,
             category: "research",
             usage: 55,
-            action: () => console.log("Keyword extraction")
+            action: () => setShowWritingAssistant(true)
           }
         ]
       },
@@ -205,7 +205,7 @@ export default function AIToolsPanel() {
             category: "analysis",
             status: "new",
             usage: 42,
-            action: () => console.log("Readability analysis")
+            action: () => setShowWritingAssistant(true)
           },
           {
             id: "originality",
@@ -214,7 +214,7 @@ export default function AIToolsPanel() {
             icon: Shield,
             category: "analysis",
             usage: 67,
-            action: () => console.log("Originality check")
+            action: () => setShowWritingAssistant(true)
           }
         ]
       },
@@ -232,7 +232,7 @@ export default function AIToolsPanel() {
             icon: GraduationCap,
             category: "collaboration",
             usage: 38,
-            action: () => console.log("Academic style guide")
+            action: () => setShowWritingAssistant(true)
           },
           {
             id: "creative_writing",
@@ -241,7 +241,7 @@ export default function AIToolsPanel() {
             icon: Feather,
             category: "collaboration",
             usage: 29,
-            action: () => console.log("Creative writing helper")
+            action: () => setShowWritingAssistant(true)
           }
         ]
       }
@@ -355,10 +355,10 @@ export default function AIToolsPanel() {
 
   // If a tool is selected, show its component
   if (showWritingAssistant) {
-    return <WritingAssistant onClose={() => setShowWritingAssistant(false)} />;
+    return <WritingAssistant selectedTool="grammar" onClose={() => setShowWritingAssistant(false)} />;
   }
   if (showCitationGenerator) {
-    return <CitationGenerator onClose={() => setShowCitationGenerator(false)} />;
+    return <CitationGeneratorModal onClose={() => setShowCitationGenerator(false)} />;
   }
   if (showLiteratureSearch) {
     return <LiteratureSearch onClose={() => setShowLiteratureSearch(false)} />;

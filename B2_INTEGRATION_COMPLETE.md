@@ -41,7 +41,7 @@ B2_ENDPOINT=https://s3.us-east-005.backblazeb2.com
 B2_REGION=us-east-005
 B2_ACCESS_KEY_ID=0054f8f7a3cf47c0000000001
 B2_SECRET_ACCESS_KEY=K005R/bu8xr3w33oiTUeumf4DvfUw6g
-B2_BUCKET_NAME=AETHERMIND
+B2_BUCKET_NAME=SCHOLARSYNC
 ```
 
 ### Key Features Implemented
@@ -55,7 +55,7 @@ B2_BUCKET_NAME=AETHERMIND
 ### File Storage Structure
 
 ```
-B2 Bucket (AETHERMIND)/
+B2 Bucket (SCHOLARSYNC)/
 ├── files/
 │   └── {userId}/
 │       └── {uuid}.{extension}

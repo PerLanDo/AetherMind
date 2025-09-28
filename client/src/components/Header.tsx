@@ -46,7 +46,7 @@ export default function Header() {
           <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
             <span className="text-primary-foreground font-bold text-sm">A</span>
           </div>
-          <span className="font-semibold text-xl">AetherMind</span>
+          <span className="font-semibold text-xl">ScholarSync</span>
         </div>
         <Badge variant="outline" className="text-xs">
           AI RESEARCH ASSISTANT

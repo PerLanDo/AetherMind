@@ -20,6 +20,11 @@ export default function ProjectsPage() {
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [location] = useLocation();
 
+  // Fetch all projects
+  const { data: projects = [] } = useQuery<Project[]>({
+    queryKey: ["api", "projects"],
+  });
+
   // Check for query parameters
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -39,20 +44,6 @@ export default function ProjectsPage() {
       window.history.replaceState({}, '', '/projects');
     }
   }, [location, projects]);
-
-  // Fetch all projects
-  const { data: projects = [] } = useQuery({
-    queryKey: ["/api/projects"],
-    queryFn: async (): Promise<Project[]> => {
-      const response = await fetch("/api/projects", {
-        credentials: "include",
-      });
-      if (!response.ok) {
-        throw new Error("Failed to fetch projects");
-      }
-      return response.json();
-    },
-  });
 
   // Function to select a specific project from the loaded projects
   const selectProjectById = (projectId: string) => {

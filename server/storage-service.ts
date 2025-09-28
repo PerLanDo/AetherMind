@@ -15,7 +15,7 @@ import { v4 as uuidv4 } from "uuid";
 
 const B2_ENDPOINT =
   process.env.B2_ENDPOINT || "https://s3.us-west-004.backblazeb2.com";
-const BUCKET_NAME = process.env.B2_BUCKET_NAME || "aethermind-storage";
+const BUCKET_NAME = process.env.B2_BUCKET_NAME || "scholarsync-storage";
 
 const hasB2Configuration = Boolean(
   process.env.B2_ACCESS_KEY_ID && process.env.B2_SECRET_ACCESS_KEY

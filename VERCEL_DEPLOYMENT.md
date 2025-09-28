@@ -1,9 +1,9 @@
-# 🚀 AetherMind Vercel Deployment Guide
+# 🚀 ScholarSync Vercel Deployment Guide
 
 ## Prerequisites
 
 1. **Vercel Account** - Sign up at https://vercel.com
-2. **GitHub Repository** - Your AetherMind code pushed to GitHub
+2. **GitHub Repository** - Your ScholarSync code pushed to GitHub
 3. **Database** - PostgreSQL database (Neon recommended)
 4. **API Keys** - Grok 4 Fast API key, Backblaze B2 credentials
 
@@ -35,7 +35,7 @@ vercel login
 #### Method 1: GitHub Integration (Recommended)
 1. Go to https://vercel.com/dashboard
 2. Click "New Project"
-3. Import your AetherMind repository
+3. Import your ScholarSync repository
 4. Configure project:
    - **Framework Preset**: Other
    - **Root Directory**: `./`
@@ -152,8 +152,8 @@ npm run db:push
 
 - **Vercel Docs**: https://vercel.com/docs
 - **Neon Docs**: https://neon.tech/docs
-- **AetherMind Issues**: Create GitHub issues for bugs
+- **ScholarSync Issues**: Create GitHub issues for bugs
 
 ---
 
-**🎉 Your AetherMind platform is now live on Vercel!**
+**🎉 Your ScholarSync platform is now live on Vercel!**

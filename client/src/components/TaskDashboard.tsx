@@ -93,9 +93,11 @@ export default function TaskDashboard() {
 
   // Fetch projects for project selection
   const { data: projects = [] } = useQuery({
-    queryKey: ["/api/projects"],
+    queryKey: ["api", "projects"],
     queryFn: async () => {
-      const response = await fetch("/api/projects", { credentials: "include" });
+      const response = await fetch("/api/projects", {
+        credentials: "include",
+      });
       if (!response.ok) throw new Error("Failed to fetch projects");
       return response.json();
     },
@@ -103,7 +105,7 @@ export default function TaskDashboard() {
 
   // Fetch tasks for selected project
   const { data: tasks = [], isLoading: isLoadingTasks } = useQuery({
-    queryKey: ["/api/projects", selectedProject, "tasks"],
+    queryKey: ["api", "projects", selectedProject, "tasks"],
     queryFn: async () => {
       if (!selectedProject) return [];
       const response = await fetch(`/api/projects/${selectedProject}/tasks`, {
@@ -117,7 +119,7 @@ export default function TaskDashboard() {
 
   // Fetch team members for assignment
   const { data: teamMembers = [] } = useQuery({
-    queryKey: ["/api/projects", selectedProject, "members"],
+    queryKey: ["api", "projects", selectedProject, "members"],
     queryFn: async () => {
       if (!selectedProject) return [];
       const response = await fetch(`/api/projects/${selectedProject}/members`, {
@@ -143,7 +145,7 @@ export default function TaskDashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["/api/projects", selectedProject, "tasks"],
+        queryKey: ["api", "projects", selectedProject, "tasks"],
       });
       setIsCreateDialogOpen(false);
       toast({ title: "Task created successfully" });
@@ -174,7 +176,7 @@ export default function TaskDashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["/api/projects", selectedProject, "tasks"],
+        queryKey: ["api", "projects", selectedProject, "tasks"],
       });
       toast({ title: "Task updated successfully" });
     },

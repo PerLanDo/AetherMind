@@ -26,7 +26,7 @@ B2_ENDPOINT=https://s3.us-east-005.backblazeb2.com
 B2_REGION=us-east-005
 B2_ACCESS_KEY_ID=your-b2-access-key-id
 B2_SECRET_ACCESS_KEY=your-b2-secret-access-key
-B2_BUCKET_NAME=AETHERMIND
+B2_BUCKET_NAME=SCHOLARSYNC
 ```
 
 ### Application Settings

@@ -71,7 +71,7 @@ export default function LoginForm({
       <CardHeader className="space-y-1">
         <CardTitle className="text-2xl text-center">Welcome Back</CardTitle>
         <CardDescription className="text-center">
-          Sign in to your AetherMind account
+          Sign in to your ScholarSync account
         </CardDescription>
       </CardHeader>
       <CardContent>

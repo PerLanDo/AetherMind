@@ -10,7 +10,7 @@ import ProjectsPage from "@/pages/ProjectsPage";
 import FilesPage from "@/pages/FilesPage";
 import TasksPage from "@/pages/TasksPage";
 import AIToolsPage from "@/pages/AIToolsPage";
-import CitationGenerator from "@/components/CitationGenerator";
+import CitationsPage from "@/pages/CitationsPage";
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import Dashboard from "@/components/Dashboard";
@@ -44,7 +44,7 @@ function Router() {
       <Route path="/files" component={FilesPage} />
       <Route path="/tasks" component={TasksPage} />
       <Route path="/ai-tools" component={AIToolsPage} />
-      <Route path="/citations" component={CitationGenerator} />
+      <Route path="/citations" component={CitationsPage} />
       <Route component={NotFound} />
     </Switch>
   );

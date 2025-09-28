@@ -247,7 +247,11 @@ export default function ProjectDashboard({
                     <MessageSquare className="h-6 w-6" />
                     <span className="text-sm">Start Chat</span>
                   </Button>
-                  <Button variant="outline" className="h-20 flex-col gap-2">
+                  <Button 
+                    variant="outline" 
+                    className="h-20 flex-col gap-2"
+                    onClick={() => setActiveTab("team")}
+                  >
                     <Users className="h-6 w-6" />
                     <span className="text-sm">Invite Team</span>
                   </Button>

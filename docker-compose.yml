@@ -7,7 +7,7 @@ services:
       - "5000:5000"
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/aethermind
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/scholarsync
       - SESSION_SECRET=${SESSION_SECRET}
       - GROK_4_FAST_FREE_API_KEY=${GROK_4_FAST_FREE_API_KEY}
       - REDIS_URL=redis://redis:6379
@@ -16,12 +16,12 @@ services:
       - redis
     restart: unless-stopped
     networks:
-      - aethermind
+      - scholarsync
 
   postgres:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_DB=aethermind
+      - POSTGRES_DB=scholarsync
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
@@ -31,7 +31,7 @@ services:
       - "5432:5432"
     restart: unless-stopped
     networks:
-      - aethermind
+      - scholarsync
 
   redis:
     image: redis:7-alpine
@@ -39,7 +39,7 @@ services:
       - "6379:6379"
     restart: unless-stopped
     networks:
-      - aethermind
+      - scholarsync
 
   nginx:
     image: nginx:alpine
@@ -53,11 +53,11 @@ services:
       - app
     restart: unless-stopped
     networks:
-      - aethermind
+      - scholarsync
 
 volumes:
   postgres_data:
 
 networks:
-  aethermind:
+  scholarsync:
     driver: bridge

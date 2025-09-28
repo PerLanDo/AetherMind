@@ -80,21 +80,8 @@ export default function Sidebar() {
   };
 
   // Fetch user's projects
-  const { data: projects = [], isLoading } = useQuery({
-    queryKey: ["/api/projects"],
-    queryFn: async (): Promise<Project[]> => {
-      const response = await fetch("/api/projects", {
-        credentials: "include",
-      });
-      if (!response.ok) {
-        throw new Error("Failed to fetch projects");
-      }
-      const result = await response.json();
-      return result.map((project: Project & { id: string | number }) => ({
-        ...project,
-        id: String(project.id),
-      }));
-    },
+  const { data: projects = [], isLoading } = useQuery<Project[]>({
+    queryKey: ["api", "projects"],
   });
 
   const navigationItems = [

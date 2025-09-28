@@ -110,7 +110,7 @@ export default function RegisterForm({
       await register(formData.username, formData.password, formData.email);
       toast({
         title: "Account created!",
-        description: `Welcome to AetherMind, ${formData.username}!`,
+        description: `Welcome to ScholarSync, ${formData.username}!`,
       });
       onSuccess();
     } catch (error) {
@@ -152,7 +152,7 @@ export default function RegisterForm({
       <CardHeader className="space-y-1">
         <CardTitle className="text-2xl text-center">Create Account</CardTitle>
         <CardDescription className="text-center">
-          Join AetherMind to start your research journey
+          Join ScholarSync to start your research journey
         </CardDescription>
       </CardHeader>
       <CardContent>

@@ -53,16 +53,7 @@ export default function FileUploadZone({
 
   // Fetch projects if no projectId is provided
   const { data: projects = [] } = useQuery<Project[]>({
-    queryKey: ["/api/projects"],
-    queryFn: async () => {
-      const response = await fetch("/api/projects", {
-        credentials: "include",
-      });
-      if (!response.ok) {
-        throw new Error("Failed to fetch projects");
-      }
-      return response.json();
-    },
+    queryKey: ["api", "projects"],
     enabled: !projectId, // Only fetch if no projectId is provided
   });
 
@@ -180,7 +171,7 @@ export default function FileUploadZone({
       await loadProjectFiles(targetProjectId);
       await queryClient.invalidateQueries({
         predicate: (query) =>
-          Array.isArray(query.queryKey) && query.queryKey[0] === "/api/files",
+          Array.isArray(query.queryKey) && query.queryKey[0] === "api" && query.queryKey[1] === "files",
       });
     } catch (error) {
       console.error("Upload error", error);
@@ -235,7 +226,7 @@ export default function FileUploadZone({
       }
       await queryClient.invalidateQueries({
         predicate: (query) =>
-          Array.isArray(query.queryKey) && query.queryKey[0] === "/api/files",
+          Array.isArray(query.queryKey) && query.queryKey[0] === "api" && query.queryKey[1] === "files",
       });
     } catch (error) {
       console.error("Delete file error", error);

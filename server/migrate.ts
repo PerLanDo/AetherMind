@@ -1,33 +1,39 @@
+// SQLite migration script - not used in production
+// This file is kept for reference but disabled to avoid dependency issues
+
+/*
 import { readFileSync } from "fs";
 import { join } from "path";
 import { Database } from "better-sqlite3";
 
-const db = new Database("aethermind.db");
+const db = new Database("scholarsync.db");
 
 const runMigration = (filename: string) => {
   try {
     const migrationPath = join(__dirname, "migrations", filename);
     const sql = readFileSync(migrationPath, "utf-8");
-
-    // Split by semicolon and execute each statement
-    const statements = sql.split(";").filter((stmt) => stmt.trim());
-
-    statements.forEach((statement) => {
-      if (statement.trim()) {
-        db.exec(statement.trim());
-      }
-    });
-
+    db.exec(sql);
     console.log(`✅ Migration ${filename} completed successfully`);
   } catch (error) {
     console.error(`❌ Migration ${filename} failed:`, error);
-    process.exit(1);
+    throw error;
   }
 };
 
-// Run migrations
-console.log("Running database migrations...");
-runMigration("001-add-cloud-key.sql");
-console.log("All migrations completed!");
+// Run migrations in order
+const migrations = [
+  "001-add-cloud-key.sql"
+];
+
+console.log("🚀 Starting database migrations...");
+
+migrations.forEach(migration => {
+  runMigration(migration);
+});
+
+console.log("✅ All migrations completed!");
 
 db.close();
+*/
+
+export {}; // Make this a module

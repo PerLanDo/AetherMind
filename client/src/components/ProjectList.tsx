@@ -98,7 +98,7 @@ export default function ProjectList({
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["api", "projects"] });
       toast({
         title: "Success",
         description: "Project deleted successfully",
@@ -143,7 +143,7 @@ export default function ProjectList({
     error,
     refetch,
   } = useQuery<Project[]>({
-    queryKey: ["/api/projects"],
+    queryKey: ["api", "projects"],
     retry: 1,
   });
 
@@ -384,7 +384,13 @@ export default function ProjectList({
 
       {/* Create Project Modal */}
       {showCreateProject && (
-        <CreateProject onClose={handleCloseCreateProject} />
+        <CreateProject 
+          onSuccess={() => {
+            handleCloseCreateProject();
+            refetch();
+          }}
+          onCancel={handleCloseCreateProject}
+        />
       )}
     </div>
   );
