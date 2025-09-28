@@ -55,6 +55,10 @@ export interface IStorage {
     role: string
   ): Promise<void>;
 
+  // Permission methods
+  canUserViewProject(userId: string, projectId: string): Promise<boolean>;
+  canUserEditProject(userId: string, projectId: string): Promise<boolean>;
+
   // File methods
   createFile(file: InsertFile): Promise<File>;
   getUserFiles(
@@ -383,6 +387,72 @@ export class DatabaseStorage implements IStorage {
   ): Promise<boolean> {
     const role = await this.getUserProjectRole(userId, projectId);
     return role === "Owner";
+  }
+
+  // Permission methods
+  async canUserViewProject(userId: string, projectId: string): Promise<boolean> {
+    try {
+      // Check if user is project owner
+      const project = await db
+        .select()
+        .from(projects)
+        .where(eq(projects.id, projectId))
+        .limit(1);
+      
+      if (project.length > 0 && project[0].ownerId === userId) {
+        return true;
+      }
+      
+      // Check if user is a project member
+      const membership = await db
+        .select()
+        .from(projectMembers)
+        .where(and(
+          eq(projectMembers.projectId, projectId),
+          eq(projectMembers.userId, userId)
+        ))
+        .limit(1);
+      
+      return membership.length > 0;
+    } catch (error) {
+      console.error("Error checking project view permission:", error);
+      return false;
+    }
+  }
+
+  async canUserEditProject(userId: string, projectId: string): Promise<boolean> {
+    try {
+      // Check if user is project owner
+      const project = await db
+        .select()
+        .from(projects)
+        .where(eq(projects.id, projectId))
+        .limit(1);
+      
+      if (project.length > 0 && project[0].ownerId === userId) {
+        return true;
+      }
+      
+      // Check if user is a project member with Editor or Owner role
+      const membership = await db
+        .select()
+        .from(projectMembers)
+        .where(and(
+          eq(projectMembers.projectId, projectId),
+          eq(projectMembers.userId, userId)
+        ))
+        .limit(1);
+      
+      if (membership.length > 0) {
+        const role = membership[0].role;
+        return role === "Owner" || role === "Editor";
+      }
+      
+      return false;
+    } catch (error) {
+      console.error("Error checking project edit permission:", error);
+      return false;
+    }
   }
 
   // File methods
