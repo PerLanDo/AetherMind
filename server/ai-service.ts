@@ -1,16 +1,8 @@
-// AI service using Grok 4 Fast for OMNISCI AI research assistant
-import OpenAI from "openai";
+// AI service using mock responses for testing
 import mammoth from "mammoth";
 
-// Using Grok 4 Fast API through OpenRouter
-const client = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.GROK_4_FAST_FREE_API_KEY,
-  defaultHeaders: {
-    "HTTP-Referer": "http://localhost:5000", // Optional, for openrouter
-    "X-Title": "ScholarSync", // Optional, for openrouter
-  },
-});
+// Mock client - no external API calls
+const client = null;
 
 export interface AIAnalysisRequest {
   text: string;
@@ -42,45 +34,30 @@ export interface AIAnalysisResponse {
 }
 
 export class AIService {
-  private model = "x-ai/grok-4-fast:free";
+  private model = "mistralai/mistral-nemo:free";
 
   async analyzeText(request: AIAnalysisRequest): Promise<AIAnalysisResponse> {
-    const systemPrompt = this.getSystemPrompt(request.analysisType);
-    const userPrompt = this.buildUserPrompt(request);
+    // For now, use fallback response to avoid external API calls
+    console.log("Using fallback AI response for:", request.analysisType);
+    return this.getFallbackResponse(request);
+  }
 
-    try {
-      const completion = await client.chat.completions.create(
-        {
-          model: this.model,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-          max_tokens: 2000,
-        },
-        {
-          headers: {
-            "HTTP-Referer": "https://omnisci-ai.replit.app",
-            "X-Title": "OMNISCI AI Research Assistant",
-          },
-        }
-      );
+  private getFallbackResponse(request: AIAnalysisRequest): AIAnalysisResponse {
+    const fallbackResponses = {
+      summary: `Summary: This text appears to be about ${request.text.substring(0, 50)}...`,
+      qa: "I'm currently unable to process this request due to AI service limitations. Please try again later.",
+      citation: "Citation generation is temporarily unavailable. Please try again later.",
+      grammar: "Grammar checking is temporarily unavailable. Please try again later.",
+      paraphrase: "Paraphrasing is temporarily unavailable. Please try again later.",
+      writing_improvement: "Writing improvement suggestions are temporarily unavailable. Please try again later.",
+    };
 
-      return {
-        result:
-          completion.choices[0].message.content || "No response generated",
-        model: this.model,
-        analysisType: request.analysisType,
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
-      console.error("AI Analysis Error:", error);
-      throw new Error(
-        `AI analysis failed: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
-    }
+    return {
+      result: fallbackResponses[request.analysisType] || "AI service is temporarily unavailable. Please try again later.",
+      model: "fallback",
+      analysisType: request.analysisType,
+      timestamp: new Date().toISOString(),
+    };
   }
 
   async chatWithContext(

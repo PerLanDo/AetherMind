@@ -78,6 +78,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // Test endpoint for debugging
+  app.get("/api/test-files", async (req, res) => {
+    try {
+      res.json({ message: "Files endpoint test - no database query" });
+    } catch (error) {
+      res.status(500).json({ error: "Test failed" });
+    }
+  });
+
   // Project routes
   app.get("/api/projects", requireAuth, async (req, res) => {
     try {
@@ -374,11 +383,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Extract text content for AI analysis
-        const content = await aiService.extractTextContent(
-          req.file.originalname,
-          req.file.mimetype,
-          req.file.buffer
-        );
+        let content = "";
+        try {
+          // Simple text extraction without AI service
+          if (req.file.mimetype.includes("text/")) {
+            content = req.file.buffer.toString("utf-8");
+          } else {
+            content = `[File: ${req.file.originalname}]`;
+          }
+        } catch (error) {
+          console.error("Text extraction failed, using fallback:", error);
+          // Fallback: just use the filename as content
+          content = `[File: ${req.file.originalname}]`;
+        }
 
         const fileData = {
           name: req.file.filename || req.file.originalname,
